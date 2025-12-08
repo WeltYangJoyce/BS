@@ -1,0 +1,46 @@
+# ----------------------------
+# Python / Flask
+# ----------------------------
+# 虚拟环境
+venv/
+bs_backend/       # 如果你用 conda 命名环境
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+*.db
+*.log
+
+# 配置文件（如果包含敏感信息）
+.env
+instance/
+*.pem
+
+# ----------------------------
+# Node / React / Vite
+# ----------------------------
+node_modules/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.vite/
+
+# ----------------------------
+# macOS / Linux / Windows 系统文件
+# ----------------------------
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# ----------------------------
+# Docker
+# ----------------------------
+# 不忽略 Dockerfile 和 docker-compose.yml，因为你要提交
+# 但可以忽略容器数据卷和镜像相关文件
+*.tar
+*.log
