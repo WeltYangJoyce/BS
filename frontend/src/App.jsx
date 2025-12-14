@@ -1,16 +1,26 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import LoginPage from "./pages/LoginPage";
-import HomePage from "./pages/HomePage";
+import { useState } from 'react'
+import Login from './pages/Login'
+import Register from './pages/Register'
+import Home from './pages/Home'
 
-function App() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<LoginPage />} />
-        <Route path="/home" element={<HomePage />} />
-      </Routes>
-    </BrowserRouter>
-  );
+export default function App() {
+  const [page, setPage] = useState('login')
+  const token = localStorage.getItem('token')
+
+
+  if (token) {
+    return <Home />
+  }
+  else{
+    return (
+    <div style={{ padding: 40 }}>
+      {page === 'login' ? <Login /> : <Register />}
+      <br />
+      <button onClick={() => setPage(page === 'login' ? 'register' : 'login')}>
+        Switch to {page === 'login' ? 'Register' : 'Login'}
+      </button>
+    </div>
+  )
+  }
+  
 }
-
-export default App;
