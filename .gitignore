@@ -44,3 +44,5 @@ Thumbs.db
 # 但可以忽略容器数据卷和镜像相关文件
 *.tar
 *.log
+
+prompt.cfg
