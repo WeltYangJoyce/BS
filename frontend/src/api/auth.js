@@ -1,8 +1,11 @@
-import axios from 'axios'
+import api from './api'
 
-const api = axios.create({
-  baseURL: 'http://localhost:5000/api'
-})
+export const login = async (payload) => {
+  const res = await api.post('/login', payload)
+  return res.data
+}
 
-export const register = (data) => api.post('/register', data)
-export const login = (data) => api.post('/login', data)
+export const register = async (payload) => {
+  const res = await api.post('/register', payload)
+  return res.data
+}

@@ -1,10 +1,13 @@
 from flask import Flask
 from flask_cors import CORS
+from flask_jwt_extended import JWTManager
+
 from routes.user_routes import user_bp
 from database import init_db
 
 app = Flask(__name__)
 app.config["JWT_SECRET_KEY"] = "your-secret"
+jwt=JWTManager(app)
 CORS(app)
 
 # Register routes

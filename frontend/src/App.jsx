@@ -1,29 +1,44 @@
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { useState } from 'react'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Home from './pages/Home'
 
 export default function App() {
-  const [page, setPage] = useState('login')
-  const token = localStorage.getItem('token')
-
-  if (token) {
-    return <Home />
-  }
+  const [token, setToken] = useState(
+    localStorage.getItem('token')
+  )
 
   return (
-    <div style={{ padding: 40 }}>
-      {page === 'login' ? (
-        <Login />
-      ) : (
-        <Register setPage={setPage} />
-      )}
+    <Routes>
+      <Route
+        path="/login"
+        element={
+          token
+            ? <Navigate to="/home" />
+            : <Login setToken={setToken} />
+        }
+      />
 
-      <br />
+      <Route
+        path="/register"
+        element={
+          token
+            ? <Navigate to="/home" />
+            : <Register />
+        }
+      />
 
-      <button onClick={() => setPage(page === 'login' ? 'register' : 'login')}>
-        Switch to {page === 'login' ? 'Register' : 'Login'}
-      </button>
-    </div>
+      <Route
+        path="/home"
+        element={
+          token
+            ? <Home setToken={setToken} />
+            : <Navigate to="/login" />
+        }
+      />
+
+      <Route path="*" element={<Navigate to="/login" />} />
+    </Routes>
   )
 }
