@@ -70,3 +70,28 @@ class Image(Base):
 
     # 关系
     user = relationship("User", back_populates="images")
+
+# backend/models.py
+
+from sqlalchemy import UniqueConstraint
+
+class ImageLike(Base):
+    __tablename__ = "image_likes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False
+    )
+
+    image_id = Column(
+        Integer,
+        ForeignKey("images.id", ondelete="CASCADE"),
+        nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "image_id", name="uix_user_image_like"),
+    )

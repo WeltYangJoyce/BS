@@ -3,6 +3,10 @@ from flask import Blueprint, request
 from sqlalchemy.orm import Session
 from werkzeug.utils import secure_filename
 import os
+from models import Image, ImageLike
+from sqlalchemy.exc import IntegrityError
+from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
+from models import ImageLike
 
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from PIL import Image as PILImage
@@ -110,11 +114,29 @@ def upload_image():
 def list_images():
     db: Session = SessionLocal()
 
+    user_id = None
+    try:
+        verify_jwt_in_request(optional=True)
+        identity = get_jwt_identity()
+        if identity:
+            user_id = int(identity)
+    except:
+        pass
+
     images = (
         db.query(Image)
         .order_by(Image.upload_time.desc())
         .all()
     )
+
+    liked_image_ids = set()
+    if user_id:
+        liked_image_ids = {
+            il.image_id
+            for il in db.query(ImageLike)
+            .filter(ImageLike.user_id == user_id)
+            .all()
+        }
 
     result = []
     for img in images:
@@ -126,6 +148,7 @@ def list_images():
             "height": img.resolution_height,
             "likes": img.likes,
             "views": img.views,
+            "liked": img.id in liked_image_ids,
             "upload_time": img.upload_time.isoformat(),
         })
 
@@ -139,7 +162,7 @@ def list_images():
 @jwt_required()
 def delete_image(image_id: int):
     db: Session = SessionLocal()
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
 
     image = db.query(Image).filter(Image.id == image_id).first()
     if not image:
@@ -158,3 +181,99 @@ def delete_image(image_id: int):
     db.commit()
 
     return {"message": "Image deleted"}
+
+# =============================
+# POST /api/images/<id>/view
+# =============================
+@image_bp.route("/images/<int:image_id>/view", methods=["POST"])
+def view_image(image_id: int):
+    db: Session = SessionLocal()
+
+    image = db.query(Image).filter(Image.id == image_id).first()
+    if not image:
+        return {"error": "Image not found"}, 404
+
+    print("view + 1",image_id)
+    image.views += 1
+    db.commit()
+
+    return {"views": image.views}
+
+# =============================
+# POST /api/images/<id>/like
+# =============================
+@image_bp.route("/images/<int:image_id>/like", methods=["POST"])
+@jwt_required()
+def toggle_like(image_id: int):
+    db: Session = SessionLocal()
+    user_id = int(get_jwt_identity())
+
+    image = db.query(Image).filter(Image.id == image_id).first()
+    if not image:
+        return {"error": "Image not found"}, 404
+
+    like = (
+        db.query(ImageLike)
+        .filter(
+            ImageLike.user_id == user_id,
+            ImageLike.image_id == image_id
+        )
+        .first()
+    )
+
+    # 已点赞 → 取消
+    if like:
+        db.delete(like)
+        image.likes = max(image.likes - 1, 0)
+        db.commit()
+        return {
+            "liked": False,
+            "likes": image.likes
+        }
+
+    # 未点赞 → 点赞
+    new_like = ImageLike(
+        user_id=user_id,
+        image_id=image_id
+    )
+
+    db.add(new_like)
+    image.likes += 1
+    db.commit()
+
+    return {
+        "liked": True,
+        "likes": image.likes
+    }
+
+# =============================
+# GET /api/images/mine
+# 当前用户的图片
+# =============================
+@image_bp.route("/images/mine", methods=["GET"])
+@jwt_required()
+def list_my_images():
+    db: Session = SessionLocal()
+    user_id = int(get_jwt_identity())
+
+    images = (
+        db.query(Image)
+        .filter(Image.user_id == user_id)
+        .order_by(Image.upload_time.desc())
+        .all()
+    )
+
+    result = []
+    for img in images:
+        result.append({
+            "id": img.id,
+            "url": f"/uploads/{img.filename}",
+            "thumbnail_url": f"/uploads/{img.thumbnail_filename}",
+            "width": img.resolution_width,
+            "height": img.resolution_height,
+            "likes": img.likes,
+            "views": img.views,
+            "upload_time": img.upload_time.isoformat(),
+        })
+
+    return {"images": result}

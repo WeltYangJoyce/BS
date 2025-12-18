@@ -14,6 +14,7 @@ export default function Login({setToken}) {
       console.log(data.access_token)
       localStorage.setItem('token', data.access_token)
       console.log("set localStorage=",data.access_token)
+      localStorage.setItem('username', data.user.username)
       setToken(data.access_token)
       console.log("set Token = ",data.access_token)
       navigate('/home')

@@ -28,3 +28,18 @@ export const uploadImage = (file) => {
 export const deleteImage = (id) => {
   return api.delete(`/images/${id}`)
 }
+
+// 记录浏览量
+export const viewImage = (id) => {
+  return api.post(`/images/${id}/view`)
+}
+
+// 点赞 / 取消点赞
+export const toggleLike = (id) => {
+  return api.post(`/images/${id}/like`)
+}
+
+// 获取当前用户的图片
+export const fetchMyImages = () => {
+  return api.get('/images/mine')
+}

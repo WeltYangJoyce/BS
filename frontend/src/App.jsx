@@ -5,6 +5,9 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Home from './pages/Home'
 import Gallery from './pages/Gallery'
+import UserCenter from './pages/UserCenter'
+
+
 
 export default function App() {
   const [token, setToken] = useState(
@@ -45,6 +48,15 @@ export default function App() {
         element={
           token
             ? <Gallery />
+            : <Navigate to="/login" />
+        }
+      />
+
+      <Route
+        path="/me"
+        element={
+          token
+            ? <UserCenter />
             : <Navigate to="/login" />
         }
       />

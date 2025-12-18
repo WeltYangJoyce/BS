@@ -28,7 +28,7 @@ export default function Gallery() {
       setUploading(true)
       await uploadImage(file)
       loadImages()
-    } catch (err) {
+    } catch {
       alert('Upload failed')
     } finally {
       setUploading(false)
@@ -36,18 +36,11 @@ export default function Gallery() {
     }
   }
 
-  const openImage = (image) => {
-    window.open(
-      `http://localhost:5000${image.url}`,
-      '_blank'
-    )
-  }
-
   return (
     <div style={{ padding: 40 }}>
       <h2>Gallery</h2>
 
-      {/* 上传区域 */}
+      {/* 上传 */}
       <div style={{ marginBottom: 20 }}>
         <input
           type="file"
@@ -58,14 +51,13 @@ export default function Gallery() {
         {uploading && <p>Uploading...</p>}
       </div>
 
-      {/* 图片展示 */}
+      {/* 列表 */}
       {loading ? (
         <p>Loading images...</p>
+      ) : images.length === 0 ? (
+        <p>No images yet.</p>
       ) : (
-        <GalleryGrid
-          images={images}
-          onOpen={openImage}
-        />
+        <GalleryGrid images={images} />
       )}
     </div>
   )
