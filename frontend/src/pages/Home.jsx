@@ -11,9 +11,17 @@ export default function Home({ setToken }) {
 
   return (
     <div style={{ padding: 40 }}>
-      <h1>Home</h1>
-      <p>You are logged in.</p>
-      <button onClick={handleLogout}>Logout</button>
+      <h2>Home</h2>
+
+      <button onClick={() => navigate('/gallery')}>
+        Go to Gallery
+      </button>
+
+      <br /><br />
+
+      <button onClick={handleLogout}>
+        Logout
+      </button>
     </div>
   )
 }

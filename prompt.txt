@@ -1,0 +1,793 @@
+# backend/routes/image_routes.py
+# backend/routes/image_routes.py
+from flask import Blueprint, request
+from sqlalchemy.orm import Session
+from werkzeug.utils import secure_filename
+import os
+
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from PIL import Image as PILImage
+import exifread
+
+from database import SessionLocal, UPLOAD_DIR
+from models import Image
+
+image_bp = Blueprint("image", __name__, url_prefix="/api")
+
+ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif"}
+
+ORIGINAL_DIR = "original"
+THUMB_DIR = "thumbs"
+
+
+# =============================
+# 工具函数
+# =============================
+def allowed_file(filename: str) -> bool:
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def extract_exif_time(filepath: str) -> str | None:
+    """
+    提取 EXIF 拍摄时间（Phase 2 只要这个）
+    """
+    try:
+        with open(filepath, "rb") as f:
+            tags = exifread.process_file(f, details=False)
+        if "EXIF DateTimeOriginal" in tags:
+            return str(tags["EXIF DateTimeOriginal"])
+    except Exception as e:
+        print("EXIF parse failed:", e)
+
+    return None
+
+
+# =============================
+# POST /api/images  上传图片
+# =============================
+@image_bp.route("/images", methods=["POST"])
+@jwt_required()
+def upload_image():
+    db: Session = SessionLocal()
+    print("AUTH HEADER =", request.headers.get("Authorization"))
+    user_id = int(get_jwt_identity())
+
+    if "file" not in request.files:
+        return {"error": "No file provided"}, 400
+
+    file = request.files["file"]
+
+    if file.filename == "":
+        return {"error": "Empty filename"}, 400
+
+    if not allowed_file(file.filename):
+        return {"error": "File type not allowed"}, 400
+
+    filename = secure_filename(file.filename)
+
+    # 路径准备
+    original_path = os.path.join(UPLOAD_DIR, ORIGINAL_DIR, filename)
+    os.makedirs(os.path.dirname(original_path), exist_ok=True)
+
+    # 保存原图
+    file.save(original_path)
+
+    # 读取尺寸
+    pil_img = PILImage.open(original_path)
+    width, height = pil_img.size
+
+    # Phase 2：缩略图暂用原图
+    thumb_path = os.path.join(UPLOAD_DIR, THUMB_DIR, filename)
+    os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
+    pil_img.copy().save(thumb_path)
+
+    # EXIF
+    exif_time = extract_exif_time(original_path)
+
+    image = Image(
+        user_id=user_id,
+        filename=f"{ORIGINAL_DIR}/{filename}",
+        thumbnail_filename=f"{THUMB_DIR}/{filename}",
+        resolution_width=width,
+        resolution_height=height,
+        exif_time=exif_time,
+    )
+
+    db.add(image)
+    db.commit()
+    db.refresh(image)
+
+    return {
+        "id": image.id,
+        "url": f"/uploads/{image.filename}",
+        "thumbnail_url": f"/uploads/{image.thumbnail_filename}",
+    }
+
+
+# =============================
+# GET /api/images  图片列表
+# =============================
+@image_bp.route("/images", methods=["GET"])
+def list_images():
+    db: Session = SessionLocal()
+
+    images = (
+        db.query(Image)
+        .order_by(Image.upload_time.desc())
+        .all()
+    )
+
+    result = []
+    for img in images:
+        result.append({
+            "id": img.id,
+            "url": f"/uploads/{img.filename}",
+            "thumbnail_url": f"/uploads/{img.thumbnail_filename}",
+            "width": img.resolution_width,
+            "height": img.resolution_height,
+            "likes": img.likes,
+            "views": img.views,
+            "upload_time": img.upload_time.isoformat(),
+        })
+
+    return {"images": result}
+
+
+# =============================
+# DELETE /api/images/<id>
+# =============================
+@image_bp.route("/images/<int:image_id>", methods=["DELETE"])
+@jwt_required()
+def delete_image(image_id: int):
+    db: Session = SessionLocal()
+    user_id = get_jwt_identity()
+
+    image = db.query(Image).filter(Image.id == image_id).first()
+    if not image:
+        return {"error": "Image not found"}, 404
+
+    if image.user_id != user_id:
+        return {"error": "Forbidden"}, 403
+
+    # 删除文件
+    for path in [image.filename, image.thumbnail_filename]:
+        full_path = os.path.join(UPLOAD_DIR, path)
+        if os.path.exists(full_path):
+            os.remove(full_path)
+
+    db.delete(image)
+    db.commit()
+
+    return {"message": "Image deleted"}
+#backend/routes/user_routes.py
+from flask import Blueprint, request, jsonify
+from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy.orm import Session
+from flask_jwt_extended import create_access_token
+
+from database import SessionLocal
+from models import User
+
+user_bp = Blueprint("user", __name__)
+
+
+@user_bp.route("/register", methods=["POST"])
+def register():
+    data = request.get_json()
+    if not data:
+        return {"error": "Invalid JSON"}, 400
+
+    username = data.get("username")
+    email = data.get("email")
+    password = data.get("password")
+
+    if not username or not email or not password:
+        return {"error": "Missing fields"}, 400
+
+    db: Session = SessionLocal()
+
+    if db.query(User).filter(User.username == username).first():
+        return {"error": "Username already exists"}, 400
+
+    if db.query(User).filter(User.email == email).first():
+        return {"error": "Email already exists"}, 400
+
+    new_user = User(
+        username=username,
+        email=email,
+        password_hash=generate_password_hash(password)
+    )
+
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    return {
+        "message": "User registered",
+        "user": {
+            "id": new_user.id,
+            "username": new_user.username,
+            "email": new_user.email
+        }
+    }, 201
+
+
+@user_bp.route("/login", methods=["POST"])
+def login():
+    data = request.get_json()
+    if not data:
+        return {"error": "Invalid JSON"}, 400
+
+    username = data.get("username")
+    password = data.get("password")
+
+    if not username or not password:
+        return {"error": "Missing fields"}, 400
+
+    db: Session = SessionLocal()
+    user = db.query(User).filter(User.username == username).first()
+
+    if not user or not check_password_hash(user.password_hash, password):
+        return {"error": "Invalid username or password"}, 401
+
+    # 🔑 核心：生成 JWT
+    access_token = create_access_token(identity=str(user.id))
+
+    return jsonify({
+        "access_token": access_token,
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email
+        }
+    }), 200
+#backend/app.py
+# backend/app.py
+from flask import Flask, send_from_directory
+from flask_cors import CORS
+from flask_jwt_extended import JWTManager
+
+from database import init_db, UPLOAD_DIR
+from routes.user_routes import user_bp
+from routes.image_routes import image_bp
+
+
+# =============================
+# 创建 Flask App
+# =============================
+
+app = Flask(__name__)
+
+# =============================
+# 基础配置
+# =============================
+
+app.config["SECRET_KEY"] = "dev-secret-key"  # Phase 3 可换为环境变量
+app.config["JWT_SECRET_KEY"] = "jwt-secret-key"
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False  # Phase 2 不设置过期，后面再加
+
+# =============================
+# 扩展初始化
+# =============================
+
+CORS(app)
+jwt = JWTManager(app)
+
+# =============================
+# 数据库初始化
+# =============================
+
+init_db()
+
+# =============================
+# 注册 Blueprint
+# =============================
+
+app.register_blueprint(user_bp, url_prefix="/api")
+app.register_blueprint(image_bp, url_prefix="/api")
+
+# =============================
+# 静态文件访问（图片）
+# =============================
+
+@app.route("/uploads/<path:filename>")
+def uploaded_file(filename):
+    """
+    访问路径示例：
+    http://localhost:5000/uploads/original/xxx.jpg
+    http://localhost:5000/uploads/thumbs/xxx.jpg
+    """
+    return send_from_directory(UPLOAD_DIR, filename)
+
+from flask_jwt_extended import JWTManager
+from flask import jsonify
+
+@jwt.invalid_token_loader
+def invalid_token_callback(reason):
+    return jsonify({"error": "invalid_token", "reason": reason}), 422
+
+@jwt.unauthorized_loader
+def missing_token_callback(reason):
+    return jsonify({"error": "missing_token", "reason": reason}), 401
+
+
+# =============================
+# 启动入口
+# =============================
+
+if __name__ == "__main__":
+    app.run(debug=True)
+#backend/database.py
+# backend/database.py
+import os
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
+
+# =============================
+# 基础路径
+# =============================
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+DATA_DIR = os.path.join(BASE_DIR, "data")
+UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
+
+ORIGINAL_DIR = os.path.join(UPLOAD_DIR, "original")
+THUMB_DIR = os.path.join(UPLOAD_DIR, "thumbs")
+
+# =============================
+# 确保目录存在
+# =============================
+
+os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(ORIGINAL_DIR, exist_ok=True)
+os.makedirs(THUMB_DIR, exist_ok=True)
+
+# =============================
+# 数据库配置
+# =============================
+
+DATABASE_PATH = os.path.join(DATA_DIR, "user.db")
+DATABASE_URL = f"sqlite:///{DATABASE_PATH}"
+
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False}
+)
+
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine
+)
+
+Base = declarative_base()
+
+# =============================
+# 初始化数据库（由 app.py 调用）
+# =============================
+
+def init_db():
+    import models  # 确保 models 被加载
+    Base.metadata.create_all(bind=engine)
+#backend/models.py
+# backend/models.py
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    DateTime,
+    ForeignKey
+)
+from sqlalchemy.orm import relationship
+from datetime import datetime
+
+from database import Base
+
+
+# =============================
+# User 表
+# =============================
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    username = Column(String(50), unique=True, nullable=False)
+    email = Column(String(120), unique=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+
+    # 反向关系
+    images = relationship(
+        "Image",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+
+
+# =============================
+# Image 表
+# =============================
+
+class Image(Base):
+    __tablename__ = "images"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    # 外键
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False
+    )
+
+    # 文件信息
+    filename = Column(String(255), nullable=False)
+    thumbnail_filename = Column(String(255), nullable=False)
+
+    # 上传时间
+    upload_time = Column(DateTime, default=datetime.utcnow)
+
+    # EXIF 信息（Phase 2 基础）
+    exif_time = Column(String(50), nullable=True)
+    exif_location = Column(String(255), nullable=True)
+
+    # 分辨率
+    resolution_width = Column(Integer, nullable=True)
+    resolution_height = Column(Integer, nullable=True)
+
+    # 热度
+    views = Column(Integer, default=0)
+    likes = Column(Integer, default=0)
+
+    # 关系
+    user = relationship("User", back_populates="images")
+#frontend/src/api/api.js
+import axios from 'axios'
+
+const api = axios.create({
+  baseURL: 'http://localhost:5000/api',
+})
+
+// 每个请求自动带 JWT
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  (error) => Promise.reject(error)
+)
+
+export default api
+#frontend/src/api/auth.js
+import api from './api'
+
+export const login = async (payload) => {
+  const res = await api.post('/login', payload)
+  return res.data
+}
+
+export const register = async (payload) => {
+  const res = await api.post('/register', payload)
+  return res.data
+}
+#frontend/src/api/image.js
+import api from './api'
+
+// 获取图片列表
+export const fetchImages = () => {
+  return api.get('/images')
+}
+
+// 上传图片
+// export const uploadImage = (file) => {
+//   const formData = new FormData()
+//   formData.append('file', file)
+
+//   return api.post('/images', formData, {
+//     headers: {
+//       'Content-Type': 'multipart/form-data',
+//     },
+//   })
+// }
+export const uploadImage = (file) => {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  // ❌ 不要写 headers
+  return api.post('/images', formData)
+}
+
+// 删除图片
+export const deleteImage = (id) => {
+  return api.delete(`/images/${id}`)
+}
+#frontend/src/pages/Gallery.jsx
+import { useEffect, useState } from 'react'
+import { fetchImages, uploadImage } from '../api/image'
+
+export default function Gallery() {
+  const [images, setImages] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [uploading, setUploading] = useState(false)
+
+  const loadImages = () => {
+    setLoading(true)
+    fetchImages()
+      .then(res => {
+        setImages(res.data.images)
+      })
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    loadImages()
+  }, [])
+
+  const handleUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    try {
+      setUploading(true)
+      await uploadImage(file)
+      loadImages() // 上传成功后刷新
+    } catch (err) {
+      alert('Upload failed')
+    } finally {
+      setUploading(false)
+      e.target.value = ''
+    }
+  }
+
+  return (
+    <div style={{ padding: 40 }}>
+      <h2>Gallery</h2>
+
+      {/* 上传区域 */}
+      <div style={{ marginBottom: 20 }}>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handleUpload}
+          disabled={uploading}
+        />
+        {uploading && <p>Uploading...</p>}
+      </div>
+
+      {/* 图片列表 */}
+      {loading ? (
+        <p>Loading images...</p>
+      ) : images.length === 0 ? (
+        <p>No images yet.</p>
+      ) : (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, 200px)',
+            gap: 20,
+          }}
+        >
+          {images.map(img => (
+            <div key={img.id}>
+              <img
+                src={`http://localhost:5000${img.thumbnail_url}`}
+                alt=""
+                style={{
+                  width: 200,
+                  height: 200,
+                  objectFit: 'cover',
+                  cursor: 'pointer',
+                }}
+                onClick={() =>
+                  window.open(
+                    `http://localhost:5000${img.url}`,
+                    '_blank'
+                  )
+                }
+              />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+#frontend/src/pages/Home.jsx
+import { useNavigate } from 'react-router-dom'
+
+export default function Home({ setToken }) {
+  const navigate = useNavigate()
+
+  const handleLogout = () => {
+    localStorage.removeItem('token')
+    setToken(null)
+    navigate('/login')
+  }
+
+  return (
+    <div style={{ padding: 40 }}>
+      <h2>Home</h2>
+
+      <button onClick={() => navigate('/gallery')}>
+        Go to Gallery
+      </button>
+
+      <br /><br />
+
+      <button onClick={handleLogout}>
+        Logout
+      </button>
+    </div>
+  )
+}
+#frontend/src/pages/Login.jsx
+import { useState } from 'react'
+import { useNavigate, Link } from 'react-router-dom'
+import { login } from '../api/auth'
+
+export default function Login({setToken}) {
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const navigate = useNavigate()
+
+  const handleLogin = async () => {
+    try {
+      const data = await login({ username, password })
+      console.log('LOGIN RESPONSE:', data)
+      console.log(data.access_token)
+      localStorage.setItem('token', data.access_token)
+      console.log("set localStorage=",data.access_token)
+      setToken(data.access_token)
+      console.log("set Token = ",data.access_token)
+      navigate('/home')
+      console.log("to home")
+    } catch {
+      alert('Login failed')
+    }
+  }
+
+  return (
+    <div style={{ padding: 40 }}>
+      <h2>Login</h2>
+      <input
+        placeholder="Username"
+        value={username}
+        onChange={e => setUsername(e.target.value)}
+      />
+      <br />
+      <input
+        type="password"
+        placeholder="Password"
+        value={password}
+        onChange={e => setPassword(e.target.value)}
+      />
+      <br />
+      <button onClick={handleLogin}>Login</button>
+      <p>
+        No account? <Link to="/register">Register</Link>
+      </p>
+    </div>
+  )
+}
+#frontend/src/pages/Register.jsx
+import { useState } from 'react'
+import { useNavigate, Link } from 'react-router-dom'
+import { register } from '../api/auth'
+
+export default function Register() {
+  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const navigate = useNavigate()
+
+  const handleRegister = async () => {
+    try {
+      await register({ username, email, password })
+      alert('Register success')
+      navigate('/login')
+    } catch {
+      alert('Register failed')
+    }
+  }
+
+  return (
+    <div style={{ padding: 40 }}>
+      <h2>Register</h2>
+      <input
+        placeholder="Username"
+        value={username}
+        onChange={e => setUsername(e.target.value)}
+      />
+      <br />
+      <input
+        placeholder="Email"
+        value={email}
+        onChange={e => setEmail(e.target.value)}
+      />
+      <br />
+      <input
+        type="password"
+        placeholder="Password"
+        value={password}
+        onChange={e => setPassword(e.target.value)}
+      />
+      <br />
+      <button onClick={handleRegister}>Register</button>
+      <p>
+        Already have an account? <Link to="/login">Login</Link>
+      </p>
+    </div>
+  )
+}
+#frontend/src/App.jsx
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { useState } from 'react'
+
+import Login from './pages/Login'
+import Register from './pages/Register'
+import Home from './pages/Home'
+import Gallery from './pages/Gallery'
+
+export default function App() {
+  const [token, setToken] = useState(
+    localStorage.getItem('token')
+  )
+
+  return (
+    <Routes>
+      <Route
+        path="/login"
+        element={
+          token
+            ? <Navigate to="/home" />
+            : <Login setToken={setToken} />
+        }
+      />
+
+      <Route
+        path="/register"
+        element={
+          token
+            ? <Navigate to="/home" />
+            : <Register />
+        }
+      />
+
+      <Route
+        path="/home"
+        element={
+          token
+            ? <Home setToken={setToken} />
+            : <Navigate to="/login" />
+        }
+      />
+
+      <Route
+        path="/gallery"
+        element={
+          token
+            ? <Gallery />
+            : <Navigate to="/login" />
+        }
+      />
+
+      <Route path="*" element={<Navigate to="/login" />} />
+    </Routes>
+  )
+}
+#frontend/src/main.jsx
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
+import App from './App'
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <BrowserRouter>
+    <App />
+  </BrowserRouter>
+)

@@ -69,7 +69,7 @@ def login():
         return {"error": "Invalid username or password"}, 401
 
     # 🔑 核心：生成 JWT
-    access_token = create_access_token(identity=user.id)
+    access_token = create_access_token(identity=str(user.id))
 
     return jsonify({
         "access_token": access_token,

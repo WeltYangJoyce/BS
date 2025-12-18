@@ -1,8 +1,10 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useState } from 'react'
+
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Home from './pages/Home'
+import Gallery from './pages/Gallery'
 
 export default function App() {
   const [token, setToken] = useState(
@@ -34,6 +36,15 @@ export default function App() {
         element={
           token
             ? <Home setToken={setToken} />
+            : <Navigate to="/login" />
+        }
+      />
+
+      <Route
+        path="/gallery"
+        element={
+          token
+            ? <Gallery />
             : <Navigate to="/login" />
         }
       />
