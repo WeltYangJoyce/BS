@@ -11,7 +11,11 @@ __pycache__/
 *.sqlite3
 *.db
 *.log
-data/**
+
+# Runtime data
+backend/data/**
+!backend/data/.gitkeep
+
 # 配置文件（如果包含敏感信息）
 .env
 instance/
