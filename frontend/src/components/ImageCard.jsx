@@ -1,17 +1,23 @@
-export default function ImageCard({ image, currentUserId, onDelete }) {
-  const canDelete = image.owner_id === currentUserId;
-
+export default function ImageCard({ image, onOpen }) {
   return (
-    <div style={{ border: "1px solid #ccc", padding: 10 }}>
+    <div
+      className="image-card"
+      style={{
+        width: 200,
+        cursor: 'pointer',
+      }}
+      onClick={() => onOpen(image)}
+    >
       <img
-        src={`http://127.0.0.1:5000/uploads/${image.filename}`}
+        src={`http://localhost:5000${image.thumbnail_url}`}
         alt=""
-        style={{ width: 200 }}
+        style={{
+          width: '100%',
+          height: 200,
+          objectFit: 'cover',
+          borderRadius: 4,
+        }}
       />
-      <p>Image ID: {image.id}</p>
-      {canDelete && (
-        <button onClick={() => onDelete(image.id)}>Delete</button>
-      )}
     </div>
-  );
+  )
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { fetchImages, uploadImage } from '../api/image'
+import GalleryGrid from '../components/GalleryGrid'
 
 export default function Gallery() {
   const [images, setImages] = useState([])
@@ -26,13 +27,20 @@ export default function Gallery() {
     try {
       setUploading(true)
       await uploadImage(file)
-      loadImages() // 上传成功后刷新
+      loadImages()
     } catch (err) {
       alert('Upload failed')
     } finally {
       setUploading(false)
       e.target.value = ''
     }
+  }
+
+  const openImage = (image) => {
+    window.open(
+      `http://localhost:5000${image.url}`,
+      '_blank'
+    )
   }
 
   return (
@@ -50,40 +58,14 @@ export default function Gallery() {
         {uploading && <p>Uploading...</p>}
       </div>
 
-      {/* 图片列表 */}
+      {/* 图片展示 */}
       {loading ? (
         <p>Loading images...</p>
-      ) : images.length === 0 ? (
-        <p>No images yet.</p>
       ) : (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, 200px)',
-            gap: 20,
-          }}
-        >
-          {images.map(img => (
-            <div key={img.id}>
-              <img
-                src={`http://localhost:5000${img.thumbnail_url}`}
-                alt=""
-                style={{
-                  width: 200,
-                  height: 200,
-                  objectFit: 'cover',
-                  cursor: 'pointer',
-                }}
-                onClick={() =>
-                  window.open(
-                    `http://localhost:5000${img.url}`,
-                    '_blank'
-                  )
-                }
-              />
-            </div>
-          ))}
-        </div>
+        <GalleryGrid
+          images={images}
+          onOpen={openImage}
+        />
       )}
     </div>
   )
