@@ -1,16 +1,23 @@
-// components/ImageCard.jsx
-export default function ImageCard({ image, onLike, onView }) {
-  const handleClick = () => {
-    onView(image.id)
-    window.open(
-      `http://localhost:5000${image.url}`,
-      '_blank'
-    )
+import { useState } from 'react'
+import { toggleLike, viewImage } from '../api/image'
+
+export default function ImageCard({ image, onChange }) {
+  const [liked, setLiked] = useState(image.liked)
+  const [likes, setLikes] = useState(image.likes)
+  const [views, setViews] = useState(image.views)
+
+  const handleView = async () => {
+    const res = await viewImage(image.id)
+    setViews(res.data.views)
+    onChange?.()
   }
 
-  const handleLike = (e) => {
+  const handleLike = async (e) => {
     e.stopPropagation()
-    onLike(image.id)
+    const res = await toggleLike(image.id)
+    setLiked(res.data.liked)
+    setLikes(res.data.likes)
+    onChange?.()
   }
 
   return (
@@ -18,50 +25,31 @@ export default function ImageCard({ image, onLike, onView }) {
       <img
         src={`http://localhost:5000${image.thumbnail_url}`}
         alt=""
-        style={{
-          width: 200,
-          height: 200,
-          objectFit: 'cover',
-          cursor: 'pointer',
+        style={{ width: 200, height: 200, objectFit: 'cover' }}
+        onClick={() => {
+          handleView()
+          window.open(
+            `http://localhost:5000${image.url}`,
+            '_blank'
+          )
         }}
-        onClick={handleClick}
       />
 
-      {/* 👀 浏览数 */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: 8,
-          left: 8,
-          background: 'rgba(0,0,0,0.6)',
-          color: '#fff',
-          fontSize: 12,
-          padding: '2px 6px',
-          borderRadius: 4,
-        }}
-      >
-        👀 {image.views}
+      <div style={{ position: 'absolute', bottom: 8, left: 8 }}>
+        👀 {views}
       </div>
 
-      {/* ❤️ 点赞 */}
       <div
         onClick={handleLike}
         style={{
           position: 'absolute',
           bottom: 8,
           right: 8,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 4,
           cursor: 'pointer',
-          background: 'rgba(0,0,0,0.6)',
-          color: image.liked ? 'red' : '#fff',
-          fontSize: 12,
-          padding: '2px 6px',
-          borderRadius: 4,
+          color: liked ? 'red' : '#fff',
         }}
       >
-        ❤️ {image.likes}
+        ❤️ {likes}
       </div>
     </div>
   )

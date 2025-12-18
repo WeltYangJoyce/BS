@@ -1,26 +1,16 @@
 import api from './api'
 
-// 获取图片列表
-export const fetchImages = () => {
-  return api.get('/images')
+// 获取图片列表（支持排序）
+export const fetchImages = (sort = 'time') => {
+  return api.get('/images', {
+    params: { sort },
+  })
 }
 
 // 上传图片
-// export const uploadImage = (file) => {
-//   const formData = new FormData()
-//   formData.append('file', file)
-
-//   return api.post('/images', formData, {
-//     headers: {
-//       'Content-Type': 'multipart/form-data',
-//     },
-//   })
-// }
 export const uploadImage = (file) => {
   const formData = new FormData()
   formData.append('file', file)
-
-  // ❌ 不要写 headers
   return api.post('/images', formData)
 }
 
@@ -39,7 +29,7 @@ export const toggleLike = (id) => {
   return api.post(`/images/${id}/like`)
 }
 
-// 获取当前用户的图片
+// 当前用户图片
 export const fetchMyImages = () => {
   return api.get('/images/mine')
 }

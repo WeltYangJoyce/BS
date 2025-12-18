@@ -2,18 +2,24 @@
 from flask import Blueprint, request
 from sqlalchemy.orm import Session
 from werkzeug.utils import secure_filename
-import os
-from models import Image, ImageLike
+from sqlalchemy import desc
 from sqlalchemy.exc import IntegrityError
-from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
-from models import ImageLike
+import os
 
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import (
+    jwt_required,
+    get_jwt_identity,
+    verify_jwt_in_request
+)
+
 from PIL import Image as PILImage
 import exifread
 
 from database import SessionLocal, UPLOAD_DIR
-from models import Image
+from models import Image, ImageLike
+from sqlalchemy import func, desc
+
+
 
 image_bp = Blueprint("image", __name__, url_prefix="/api")
 
@@ -21,7 +27,6 @@ ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif"}
 
 ORIGINAL_DIR = "original"
 THUMB_DIR = "thumbs"
-
 
 # =============================
 # 工具函数
@@ -31,9 +36,6 @@ def allowed_file(filename: str) -> bool:
 
 
 def extract_exif_time(filepath: str) -> str | None:
-    """
-    提取 EXIF 拍摄时间（Phase 2 只要这个）
-    """
     try:
         with open(filepath, "rb") as f:
             tags = exifread.process_file(f, details=False)
@@ -52,7 +54,6 @@ def extract_exif_time(filepath: str) -> str | None:
 @jwt_required()
 def upload_image():
     db: Session = SessionLocal()
-    print("AUTH HEADER =", request.headers.get("Authorization"))
     user_id = int(get_jwt_identity())
 
     if "file" not in request.files:
@@ -68,14 +69,11 @@ def upload_image():
 
     filename = secure_filename(file.filename)
 
-    # 路径准备
+    # 保存原图
     original_path = os.path.join(UPLOAD_DIR, ORIGINAL_DIR, filename)
     os.makedirs(os.path.dirname(original_path), exist_ok=True)
-
-    # 保存原图
     file.save(original_path)
 
-    # 读取尺寸
     pil_img = PILImage.open(original_path)
     width, height = pil_img.size
 
@@ -84,7 +82,6 @@ def upload_image():
     os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
     pil_img.copy().save(thumb_path)
 
-    # EXIF
     exif_time = extract_exif_time(original_path)
 
     image = Image(
@@ -108,12 +105,13 @@ def upload_image():
 
 
 # =============================
-# GET /api/images  图片列表
+# GET /api/images  图片列表（支持排序）
 # =============================
 @image_bp.route("/images", methods=["GET"])
 def list_images():
     db: Session = SessionLocal()
 
+    # 可选登录（为了 liked 状态）
     user_id = None
     try:
         verify_jwt_in_request(optional=True)
@@ -123,12 +121,31 @@ def list_images():
     except:
         pass
 
-    images = (
-        db.query(Image)
-        .order_by(Image.upload_time.desc())
-        .all()
-    )
+    sort = request.args.get("sort", "time")
 
+    images = db.query(Image).all()
+
+    # 🔥 Python 层排序（核心）
+    if sort == "hot":
+        print("hot\n")
+        images.sort(
+        key=lambda img: (
+            (img.likes or 0) + (img.views or 0),  # 主：hot
+            img.likes or 0,                       # 次：likes
+            img.upload_time                       # 再次：新图优先
+        ),
+            reverse=True
+        )
+    else:
+        print("time\n")
+        images.sort(
+            key=lambda img: img.upload_time,
+            reverse=True
+        )
+
+    for img in images:
+        print("img_id = ",img.id,",img.like = ",img.likes,",img.view = ",img.views,",hot = ",img.likes+img.views)
+        # print(img.likes+img.views)
     liked_image_ids = set()
     if user_id:
         liked_image_ids = {
@@ -171,7 +188,6 @@ def delete_image(image_id: int):
     if image.user_id != user_id:
         return {"error": "Forbidden"}, 403
 
-    # 删除文件
     for path in [image.filename, image.thumbnail_filename]:
         full_path = os.path.join(UPLOAD_DIR, path)
         if os.path.exists(full_path):
@@ -181,6 +197,7 @@ def delete_image(image_id: int):
     db.commit()
 
     return {"message": "Image deleted"}
+
 
 # =============================
 # POST /api/images/<id>/view
@@ -193,11 +210,11 @@ def view_image(image_id: int):
     if not image:
         return {"error": "Image not found"}, 404
 
-    print("view + 1",image_id)
     image.views += 1
     db.commit()
 
     return {"views": image.views}
+
 
 # =============================
 # POST /api/images/<id>/like
@@ -221,34 +238,22 @@ def toggle_like(image_id: int):
         .first()
     )
 
-    # 已点赞 → 取消
     if like:
         db.delete(like)
         image.likes = max(image.likes - 1, 0)
         db.commit()
-        return {
-            "liked": False,
-            "likes": image.likes
-        }
+        return {"liked": False, "likes": image.likes}
 
-    # 未点赞 → 点赞
-    new_like = ImageLike(
-        user_id=user_id,
-        image_id=image_id
-    )
-
+    new_like = ImageLike(user_id=user_id, image_id=image_id)
     db.add(new_like)
     image.likes += 1
     db.commit()
 
-    return {
-        "liked": True,
-        "likes": image.likes
-    }
+    return {"liked": True, "likes": image.likes}
+
 
 # =============================
 # GET /api/images/mine
-# 当前用户的图片
 # =============================
 @image_bp.route("/images/mine", methods=["GET"])
 @jwt_required()
