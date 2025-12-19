@@ -11,7 +11,25 @@ from datetime import datetime
 
 from database import Base
 
+from sqlalchemy import Column, Integer, String, ForeignKey, Table
+from sqlalchemy.orm import relationship
+from database import Base
 
+# =============================
+# Image-Tags 表
+# =============================
+image_tags = Table(
+    "image_tags",
+    Base.metadata,
+    Column("image_id", Integer, ForeignKey("images.id")),
+    Column("tag_id", Integer, ForeignKey("tags.id")),
+)
+
+class Tag(Base):
+    __tablename__ = "tags"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(50), unique=True, nullable=False)
 # =============================
 # User 表
 # =============================
@@ -71,7 +89,15 @@ class Image(Base):
     # 关系
     user = relationship("User", back_populates="images")
 
-# backend/models.py
+    tags =relationship(
+        "Tag",
+        secondary=image_tags,
+        backref= "images"
+    )
+
+# =============================
+# Image-likes 表
+# =============================
 
 from sqlalchemy import UniqueConstraint
 
@@ -95,3 +121,5 @@ class ImageLike(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "image_id", name="uix_user_image_like"),
     )
+
+

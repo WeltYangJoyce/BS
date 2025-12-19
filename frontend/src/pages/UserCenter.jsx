@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { fetchMyImages } from '../api/image'
 import MyImageCard from '../components/MyImageCard'
-
+import { useNavigate } from 'react-router-dom'
+import BackToHomeButton from '../components/BackToHomeButton'
 export default function UserCenter() {
   const [images, setImages] = useState([])
   const [loading, setLoading] = useState(true)
+  const navigate = useNavigate()
 
   useEffect(() => {
     loadMyImages()
@@ -30,6 +32,14 @@ export default function UserCenter() {
   return (
     <div style={{ padding: 40 }}>
       <h2>我的图片</h2>
+
+      {/* ✅ 上传入口（新增） */}
+      <div style={{ marginBottom: 20 }}>
+         <BackToHomeButton />
+        <button onClick={() => navigate('/user/upload')}>
+          上传新图片
+        </button>
+      </div>
 
       {loading ? (
         <p>Loading...</p>

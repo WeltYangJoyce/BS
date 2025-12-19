@@ -1,16 +1,96 @@
+project/
+│
+├── backend/
+│   │
+│   ├── app.py                     # Flask 入口（✅ 完成）
+│   │
+│   ├── database.py                # DB / Session / UPLOAD_DIR（✅ 完成）
+│   │
+│   ├── models.py                  # User / Image/Tag 模型（✅ 完成）
+│   │
+│   ├── requirements.txt           # 后端依赖（✅ 完成）
+│   │
+│   ├── uploads/                   # 图片文件根目录（✅ 使用中）
+│   │   ├── original/              # 原图存放目录（✅）
+│   │   │   
+│   │   │
+│   │   └── thumbs/                # 缩略图目录（⏭ Phase 5）
+│   │
+│   ├── routes/
+│   │   │
+│   │   ├── __init__.py
+│   │   │
+│   │   ├── user_routes.py         # 注册 / 登录（✅ 完成）
+│   │   |
+|   |   ├── tag_routes.py          
+│   │   └── image_routes.py        # 图片上传 / 列表 / 删除（🔄 闭环中）
+│   
+│
+├── frontend/
+│   │
+│   ├── src/
+│   │   │
+│   │   ├── api/
+│   │   │   ├── api.js
+|   |   |   ├── tag.js
+│   │   │   ├── auth.js            # login / register（✅）
+│   │   │   └── image.js           # fetchImages / uploadImage（🔄）
+│   │   │
+│   │   ├── pages/
+│   │   │   ├── Home.jsx
+|   |   |   ├── Upload.jsx
+|   |   |   ├── UserCenter.jsx
+│   │   │   ├── Login.jsx          # 登录页（✅）
+│   │   │   ├── Register.jsx       # 注册页（✅）
+│   │   │   └── Gallery.jsx        # 图片展示页（🔄）
+│   │   │
+│   │   ├── components/
+|   |   |   ├──BackToHomeButton.jsx
+|   |   |   ├──GalleryGrid.jsx
+|   |   |   ├──ImageCard.jsx
+|   |   |   ├──MyImageCard.jsx
+|   |   |   ├──UploadPanel.jsx
+│   │   │   
+│   │   │   
+│   │   │   
+│   │   │
+│   │   |
+│   │   │   
+│   │   │   
+│   │   │
+│   │   ├── App.jsx                # 路由入口（✅）
+│   │   ├── main.jsx               # React 启动（✅）
+│   │   └── index.css
+│   │
+│   └── package.json
+│
+├── .env                           # 环境变量（⏭ Phase 3）
+├── .gitignore
+└── README.md
+
 # backend/routes/image_routes.py
 # backend/routes/image_routes.py
 from flask import Blueprint, request
 from sqlalchemy.orm import Session
 from werkzeug.utils import secure_filename
+from sqlalchemy import desc
+from sqlalchemy.exc import IntegrityError
 import os
 
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import (
+    jwt_required,
+    get_jwt_identity,
+    verify_jwt_in_request
+)
+
 from PIL import Image as PILImage
 import exifread
 
 from database import SessionLocal, UPLOAD_DIR
-from models import Image
+from models import Image, ImageLike, Tag
+from sqlalchemy import func, desc
+
+
 
 image_bp = Blueprint("image", __name__, url_prefix="/api")
 
@@ -18,7 +98,6 @@ ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif"}
 
 ORIGINAL_DIR = "original"
 THUMB_DIR = "thumbs"
-
 
 # =============================
 # 工具函数
@@ -28,9 +107,6 @@ def allowed_file(filename: str) -> bool:
 
 
 def extract_exif_time(filepath: str) -> str | None:
-    """
-    提取 EXIF 拍摄时间（Phase 2 只要这个）
-    """
     try:
         with open(filepath, "rb") as f:
             tags = exifread.process_file(f, details=False)
@@ -49,7 +125,6 @@ def extract_exif_time(filepath: str) -> str | None:
 @jwt_required()
 def upload_image():
     db: Session = SessionLocal()
-    print("AUTH HEADER =", request.headers.get("Authorization"))
     user_id = int(get_jwt_identity())
 
     if "file" not in request.files:
@@ -65,14 +140,11 @@ def upload_image():
 
     filename = secure_filename(file.filename)
 
-    # 路径准备
+    # 保存原图
     original_path = os.path.join(UPLOAD_DIR, ORIGINAL_DIR, filename)
     os.makedirs(os.path.dirname(original_path), exist_ok=True)
-
-    # 保存原图
     file.save(original_path)
 
-    # 读取尺寸
     pil_img = PILImage.open(original_path)
     width, height = pil_img.size
 
@@ -81,7 +153,6 @@ def upload_image():
     os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
     pil_img.copy().save(thumb_path)
 
-    # EXIF
     exif_time = extract_exif_time(original_path)
 
     image = Image(
@@ -105,14 +176,163 @@ def upload_image():
 
 
 # =============================
-# GET /api/images  图片列表
+# GET /api/images  图片列表（支持排序）
 # =============================
 @image_bp.route("/images", methods=["GET"])
 def list_images():
     db: Session = SessionLocal()
 
+    # 可选登录
+    user_id = None
+    try:
+        verify_jwt_in_request(optional=True)
+        identity = get_jwt_identity()
+        if identity:
+            user_id = int(identity)
+    except:
+        pass
+
+    sort = request.args.get("sort", "time")
+    tag_name = request.args.get("tag")  # ⭐ 新增
+
+    query = db.query(Image)
+
+    # 🔖 Tag 过滤
+    if tag_name:
+        query = query.join(Image.tags).filter(Tag.name == tag_name)
+
+    images = query.all()
+
+    # 🔥 Python 层排序（与你现在一致）
+    if sort == "hot":
+        images.sort(
+            key=lambda img: (img.likes or 0) + (img.views or 0),
+            reverse=True
+        )
+    else:
+        images.sort(
+            key=lambda img: img.upload_time,
+            reverse=True
+        )
+
+    liked_image_ids = set()
+    if user_id:
+        liked_image_ids = {
+            il.image_id
+            for il in db.query(ImageLike)
+            .filter(ImageLike.user_id == user_id)
+            .all()
+        }
+
+    return {
+        "images": [
+            {
+                "id": img.id,
+                "url": f"/uploads/{img.filename}",
+                "thumbnail_url": f"/uploads/{img.thumbnail_filename}",
+                "likes": img.likes,
+                "views": img.views,
+                "liked": img.id in liked_image_ids,
+                "tags": [t.name for t in img.tags],  # ⭐ 返回 tags
+                "upload_time": img.upload_time.isoformat(),
+            }
+            for img in images
+        ]
+    }
+
+
+# =============================
+# DELETE /api/images/<id>
+# =============================
+@image_bp.route("/images/<int:image_id>", methods=["DELETE"])
+@jwt_required()
+def delete_image(image_id: int):
+    db: Session = SessionLocal()
+    user_id = int(get_jwt_identity())
+
+    image = db.query(Image).filter(Image.id == image_id).first()
+    if not image:
+        return {"error": "Image not found"}, 404
+
+    if image.user_id != user_id:
+        return {"error": "Forbidden"}, 403
+
+    for path in [image.filename, image.thumbnail_filename]:
+        full_path = os.path.join(UPLOAD_DIR, path)
+        if os.path.exists(full_path):
+            os.remove(full_path)
+
+    db.delete(image)
+    db.commit()
+
+    return {"message": "Image deleted"}
+
+
+# =============================
+# POST /api/images/<id>/view
+# =============================
+@image_bp.route("/images/<int:image_id>/view", methods=["POST"])
+def view_image(image_id: int):
+    db: Session = SessionLocal()
+
+    image = db.query(Image).filter(Image.id == image_id).first()
+    if not image:
+        return {"error": "Image not found"}, 404
+
+    image.views += 1
+    db.commit()
+
+    return {"views": image.views}
+
+
+# =============================
+# POST /api/images/<id>/like
+# =============================
+@image_bp.route("/images/<int:image_id>/like", methods=["POST"])
+@jwt_required()
+def toggle_like(image_id: int):
+    db: Session = SessionLocal()
+    user_id = int(get_jwt_identity())
+
+    image = db.query(Image).filter(Image.id == image_id).first()
+    if not image:
+        return {"error": "Image not found"}, 404
+
+    like = (
+        db.query(ImageLike)
+        .filter(
+            ImageLike.user_id == user_id,
+            ImageLike.image_id == image_id
+        )
+        .first()
+    )
+
+    if like:
+        db.delete(like)
+        image.likes = max(image.likes - 1, 0)
+        db.commit()
+        return {"liked": False, "likes": image.likes}
+
+    new_like = ImageLike(user_id=user_id, image_id=image_id)
+    db.add(new_like)
+    image.likes += 1
+    db.commit()
+
+    return {"liked": True, "likes": image.likes}
+
+
+# =============================
+# GET /api/images/mine
+# =============================
+@image_bp.route("/images/mine", methods=["GET"])
+@jwt_required()
+def list_my_images():
+    db: Session = SessionLocal()
+    user_id = int(get_jwt_identity())
+
     images = (
         db.query(Image)
+        .filter(Image.user_id == user_id)
         .order_by(Image.upload_time.desc())
         .all()
     )
@@ -131,34 +351,24 @@ def list_images():
         })
 
     return {"images": result}
+#backend/routes/tag_routes.py
+from flask import Blueprint
+from database import SessionLocal
+from models import Tag
 
+tag_bp = Blueprint("tag", __name__, url_prefix="/api")
 
-# =============================
-# DELETE /api/images/<id>
-# =============================
-@image_bp.route("/images/<int:image_id>", methods=["DELETE"])
-@jwt_required()
-def delete_image(image_id: int):
-    db: Session = SessionLocal()
-    user_id = get_jwt_identity()
+@tag_bp.route("/tags", methods=["GET"])
+def list_tags():
+    db = SessionLocal()
+    tags = db.query(Tag).order_by(Tag.name.asc()).all()
 
-    image = db.query(Image).filter(Image.id == image_id).first()
-    if not image:
-        return {"error": "Image not found"}, 404
-
-    if image.user_id != user_id:
-        return {"error": "Forbidden"}, 403
-
-    # 删除文件
-    for path in [image.filename, image.thumbnail_filename]:
-        full_path = os.path.join(UPLOAD_DIR, path)
-        if os.path.exists(full_path):
-            os.remove(full_path)
-
-    db.delete(image)
-    db.commit()
-
-    return {"message": "Image deleted"}
+    return {
+        "tags": [
+            {"id": t.id, "name": t.name}
+            for t in tags
+        ]
+    }
 #backend/routes/user_routes.py
 from flask import Blueprint, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -250,7 +460,7 @@ from flask_jwt_extended import JWTManager
 from database import init_db, UPLOAD_DIR
 from routes.user_routes import user_bp
 from routes.image_routes import image_bp
-
+from routes.tag_routes import tag_bp
 
 # =============================
 # 创建 Flask App
@@ -285,6 +495,7 @@ init_db()
 
 app.register_blueprint(user_bp, url_prefix="/api")
 app.register_blueprint(image_bp, url_prefix="/api")
+app.register_blueprint(tag_bp,url_prefix="/api")
 
 # =============================
 # 静态文件访问（图片）
@@ -384,7 +595,25 @@ from datetime import datetime
 
 from database import Base
 
+from sqlalchemy import Column, Integer, String, ForeignKey, Table
+from sqlalchemy.orm import relationship
+from database import Base
 
+# =============================
+# Image-Tags 表
+# =============================
+image_tags = Table(
+    "image_tags",
+    Base.metadata,
+    Column("image_id", Integer, ForeignKey("images.id")),
+    Column("tag_id", Integer, ForeignKey("tags.id")),
+)
+
+class Tag(Base):
+    __tablename__ = "tags"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(50), unique=True, nullable=False)
 # =============================
 # User 表
 # =============================
@@ -443,6 +672,41 @@ class Image(Base):
 
     # 关系
     user = relationship("User", back_populates="images")
+
+    tags =relationship(
+        "Tag",
+        secondary=image_tags,
+        backref= "images"
+    )
+
+# =============================
+# Image-likes 表
+# =============================
+
+from sqlalchemy import UniqueConstraint
+
+class ImageLike(Base):
+    __tablename__ = "image_likes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False
+    )
+
+    image_id = Column(
+        Integer,
+        ForeignKey("images.id", ondelete="CASCADE"),
+        nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "image_id", name="uix_user_image_like"),
+    )
+
+
 #frontend/src/api/api.js
 import axios from 'axios'
 
@@ -478,27 +742,21 @@ export const register = async (payload) => {
 #frontend/src/api/image.js
 import api from './api'
 
-// 获取图片列表
-export const fetchImages = () => {
-  return api.get('/images')
+// 获取图片列表（支持排序）
+export const fetchImages = ({ sort = 'time', tag = null }) => {
+  return api.get('/images', {
+    params: {
+      sort,
+      tag,
+    },
+  })
 }
 
-// 上传图片
-// export const uploadImage = (file) => {
-//   const formData = new FormData()
-//   formData.append('file', file)
 
-//   return api.post('/images', formData, {
-//     headers: {
-//       'Content-Type': 'multipart/form-data',
-//     },
-//   })
-// }
+// 上传图片
 export const uploadImage = (file) => {
   const formData = new FormData()
   formData.append('file', file)
-
-  // ❌ 不要写 headers
   return api.post('/images', formData)
 }
 
@@ -506,94 +764,312 @@ export const uploadImage = (file) => {
 export const deleteImage = (id) => {
   return api.delete(`/images/${id}`)
 }
-#frontend/src/pages/Gallery.jsx
-import { useEffect, useState } from 'react'
-import { fetchImages, uploadImage } from '../api/image'
 
-export default function Gallery() {
-  const [images, setImages] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [uploading, setUploading] = useState(false)
+// 记录浏览量
+export const viewImage = (id) => {
+  return api.post(`/images/${id}/view`)
+}
 
-  const loadImages = () => {
-    setLoading(true)
-    fetchImages()
-      .then(res => {
-        setImages(res.data.images)
-      })
-      .finally(() => setLoading(false))
+// 点赞 / 取消点赞
+export const toggleLike = (id) => {
+  return api.post(`/images/${id}/like`)
+}
+
+// 当前用户图片
+export const fetchMyImages = () => {
+  return api.get('/images/mine')
+}
+
+export const fetchTags = () => {
+  return api.get('/tags')
+}
+#frontend/src/api/tag.js
+import api from "./api";
+
+// 获取所有 tags
+export const fetchTags = () => {
+  return api.get("/tags");
+};
+#frontend/src/components/BackToHomeButton.jsx
+import { useNavigate } from 'react-router-dom'
+
+export default function BackToHomeButton() {
+  const navigate = useNavigate()
+
+  return (
+    <button
+      onClick={() => navigate('/home')}
+      style={{
+        marginBottom: 20,
+        padding: '6px 12px',
+        cursor: 'pointer',
+      }}
+    >
+      ← Back to Home
+    </button>
+  )
+}
+#frontend/src/components/GalleryGrid.jsx
+import ImageCard from './ImageCard'
+
+export default function GalleryGrid({ images, onChange }) {
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, 200px)',
+        gap: 16,
+      }}
+    >
+      {images.map(img => (
+        <ImageCard
+          key={img.id}
+          image={img}
+          onChange={onChange}
+        />
+      ))}
+    </div>
+  )
+}
+#frontend/src/components/ImageCard.jsx
+import { useState } from 'react'
+import { toggleLike, viewImage } from '../api/image'
+
+export default function ImageCard({ image, onChange }) {
+  const [liked, setLiked] = useState(image.liked)
+  const [likes, setLikes] = useState(image.likes)
+  const [views, setViews] = useState(image.views)
+
+  const handleView = async () => {
+    const res = await viewImage(image.id)
+    setViews(res.data.views)
+    onChange?.()
   }
 
-  useEffect(() => {
-    loadImages()
-  }, [])
+  const handleLike = async (e) => {
+    e.stopPropagation()
+    const res = await toggleLike(image.id)
+    setLiked(res.data.liked)
+    setLikes(res.data.likes)
+    onChange?.()
+  }
 
-  const handleUpload = async (e) => {
-    const file = e.target.files[0]
-    if (!file) return
+  return (
+    <div style={{ position: 'relative' }}>
+      <img
+        src={`http://localhost:5000${image.thumbnail_url}`}
+        alt=""
+        style={{ width: 200, height: 200, objectFit: 'cover' }}
+        onClick={() => {
+          handleView()
+          window.open(
+            `http://localhost:5000${image.url}`,
+            '_blank'
+          )
+        }}
+      />
+
+      <div style={{ position: 'absolute', bottom: 8, left: 8 }}>
+        👀 {views}
+      </div>
+
+      <div
+        onClick={handleLike}
+        style={{
+          position: 'absolute',
+          bottom: 8,
+          right: 8,
+          cursor: 'pointer',
+          color: liked ? 'red' : '#fff',
+        }}
+      >
+        ❤️ {likes}
+      </div>
+    </div>
+  )
+}
+#frontend/src/components/MyImageCard.jsx
+import { deleteImage } from '../api/image'
+
+export default function MyImageCard({ image, onDeleted }) {
+  const handleDelete = async (e) => {
+    e.stopPropagation()
+
+    if (!window.confirm('确定要删除这张图片吗？')) return
 
     try {
-      setUploading(true)
-      await uploadImage(file)
-      loadImages() // 上传成功后刷新
+      await deleteImage(image.id)
+      onDeleted(image.id) // ✅ 通知父组件同步 state
     } catch (err) {
-      alert('Upload failed')
-    } finally {
-      setUploading(false)
-      e.target.value = ''
+      alert('Delete failed')
     }
   }
 
   return (
+    <div
+      style={{
+        position: 'relative',
+        width: 200,
+        height: 200,
+        borderRadius: 6,
+        overflow: 'hidden',
+      }}
+    >
+      <img
+        src={`http://localhost:5000${image.thumbnail_url}`}
+        alt=""
+        style={{
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          cursor: 'pointer',
+        }}
+        onClick={() =>
+          window.open(
+            `http://localhost:5000${image.url}`,
+            '_blank'
+          )
+        }
+      />
+
+      {/* 🗑 删除按钮 */}
+      <button
+        onClick={handleDelete}
+        style={{
+          position: 'absolute',
+          top: 6,
+          right: 6,
+          background: 'rgba(0,0,0,0.7)',
+          color: '#fff',
+          border: 'none',
+          borderRadius: 4,
+          fontSize: 12,
+          padding: '4px 6px',
+          cursor: 'pointer',
+        }}
+      >
+        删除
+      </button>
+
+      {/* 🔧 未来扩展位（现在不启用） */}
+      {/*
+      <div style={{
+        position: 'absolute',
+        bottom: 6,
+        left: 6,
+        display: 'flex',
+        gap: 6
+      }}>
+        <button>编辑</button>
+        <button>Tag</button>
+      </div>
+      */}
+    </div>
+  )
+}
+#frontend/src/components/UploadPanel.jsx
+export default function UploadPanel({ onUpload, uploading }) {
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <input
+        type="file"
+        accept="image/*"
+        onChange={e => {
+          const file = e.target.files[0]
+          if (file) onUpload(file)
+          e.target.value = ''
+        }}
+        disabled={uploading}
+      />
+      {uploading && <p>Uploading...</p>}
+    </div>
+  )
+}
+#frontend/src/pages/Gallery.jsx
+import { useEffect, useState, useCallback } from 'react'
+import { fetchImages } from '../api/image'
+import { fetchTags } from '../api/tag'
+import GalleryGrid from '../components/GalleryGrid'
+import BackToHomeButton from '../components/BackToHomeButton'
+export default function Gallery() {
+  const [images, setImages] = useState([])
+  const [tags, setTags] = useState([])
+
+  const [sort, setSort] = useState('time')
+  const [activeTag, setActiveTag] = useState(null)
+
+  const loadImages = useCallback(() => {
+    fetchImages({ sort, tag: activeTag })
+      .then(res => setImages(res.data.images))
+  }, [sort, activeTag])
+
+  useEffect(() => {
+    fetchTags().then(res => setTags(res.data.tags))
+  }, [])
+
+  useEffect(() => {
+    loadImages()
+  }, [loadImages])
+
+  return (
     <div style={{ padding: 40 }}>
+       <BackToHomeButton />
       <h2>Gallery</h2>
 
-      {/* 上传区域 */}
-      <div style={{ marginBottom: 20 }}>
-        <input
-          type="file"
-          accept="image/*"
-          onChange={handleUpload}
-          disabled={uploading}
-        />
-        {uploading && <p>Uploading...</p>}
-      </div>
-
-      {/* 图片列表 */}
-      {loading ? (
-        <p>Loading images...</p>
-      ) : images.length === 0 ? (
-        <p>No images yet.</p>
-      ) : (
-        <div
+      {/* 排序 */}
+      <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+        <button
+          onClick={() => setSort("time")}
           style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, 200px)',
-            gap: 20,
+            padding: "6px 12px",
+            background: sort === "time" ? "#333" : "#eee",
+            color: sort === "time" ? "#fff" : "#000",
+            borderRadius: 4,
+            cursor: "pointer",
           }}
         >
-          {images.map(img => (
-            <div key={img.id}>
-              <img
-                src={`http://localhost:5000${img.thumbnail_url}`}
-                alt=""
-                style={{
-                  width: 200,
-                  height: 200,
-                  objectFit: 'cover',
-                  cursor: 'pointer',
-                }}
-                onClick={() =>
-                  window.open(
-                    `http://localhost:5000${img.url}`,
-                    '_blank'
-                  )
-                }
-              />
-            </div>
-          ))}
-        </div>
-      )}
+          🕒 Time
+        </button>
+
+        <button
+          onClick={() => setSort("hot")}
+          style={{
+            padding: "6px 12px",
+            background: sort === "hot" ? "#ff6b00" : "#eee",
+            color: sort === "hot" ? "#fff" : "#000",
+            borderRadius: 4,
+            cursor: "pointer",
+          }}
+        >
+          🔥 Hot
+        </button>
+      </div>
+
+
+      {/* Tag 筛选 */}
+      <div style={{ margin: '16px 0' }}>
+        <button
+          onClick={() => setActiveTag(null)}
+          style={{ fontWeight: !activeTag ? 'bold' : 'normal' }}
+        >
+          All
+        </button>
+
+        {tags.map(tag => (
+          <button
+            key={tag.id}
+            onClick={() => setActiveTag(tag.name)}
+            style={{
+              marginLeft: 8,
+              fontWeight: activeTag === tag.name ? 'bold' : 'normal'
+            }}
+          >
+            #{tag.name}
+          </button>
+        ))}
+      </div>
+
+      <GalleryGrid images={images} onChange={loadImages} />
     </div>
   )
 }
@@ -601,10 +1077,12 @@ export default function Gallery() {
 import { useNavigate } from 'react-router-dom'
 
 export default function Home({ setToken }) {
+  console.log('⚠️ Home rendered')
   const navigate = useNavigate()
-
+  const username = localStorage.getItem('username')
   const handleLogout = () => {
     localStorage.removeItem('token')
+    localStorage.removeItem('username')
     setToken(null)
     navigate('/login')
   }
@@ -612,13 +1090,18 @@ export default function Home({ setToken }) {
   return (
     <div style={{ padding: 40 }}>
       <h2>Home</h2>
-
+      <div style={{ marginBottom: 20 }}>
+        Welcome, <strong>{username}</strong>
+      </div>
       <button onClick={() => navigate('/gallery')}>
         Go to Gallery
       </button>
 
       <br /><br />
-
+      <button onClick={() => navigate('/user')}>
+        My Images
+      </button>
+      <br/><br/>
       <button onClick={handleLogout}>
         Logout
       </button>
@@ -642,6 +1125,7 @@ export default function Login({setToken}) {
       console.log(data.access_token)
       localStorage.setItem('token', data.access_token)
       console.log("set localStorage=",data.access_token)
+      localStorage.setItem('username', data.user.username)
       setToken(data.access_token)
       console.log("set Token = ",data.access_token)
       navigate('/home')
@@ -724,6 +1208,109 @@ export default function Register() {
     </div>
   )
 }
+#frontend/src/pages/Upload.jsx
+import { useState } from 'react'
+import UploadPanel from '../components/UploadPanel'
+import { uploadImage } from '../api/image'
+import { useNavigate } from 'react-router-dom'
+
+export default function Upload() {
+  const [uploading, setUploading] = useState(false)
+  const navigate = useNavigate()
+
+  const handleUpload = async (file) => {
+    try {
+      setUploading(true)
+      await uploadImage(file)
+      alert('Upload success')
+      console.log('👉 upload success, navigating to /user')
+      navigate('/user',{replace : true}) // 上传完成后回到用户中心
+    } catch (err) {
+      alert('Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div style={{ padding: 40 }}>
+      <h2>Upload Image</h2>
+
+      <UploadPanel
+        onUpload={handleUpload}
+        uploading={uploading}
+      />
+    </div>
+  )
+}
+#frontend/src/pages/UserCenter.jsx
+import { useEffect, useState } from 'react'
+import { fetchMyImages } from '../api/image'
+import MyImageCard from '../components/MyImageCard'
+import { useNavigate } from 'react-router-dom'
+import BackToHomeButton from '../components/BackToHomeButton'
+export default function UserCenter() {
+  const [images, setImages] = useState([])
+  const [loading, setLoading] = useState(true)
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    loadMyImages()
+  }, [])
+
+  const loadMyImages = async () => {
+    setLoading(true)
+    try {
+      const res = await fetchMyImages()
+      setImages(res.data.images)
+    } catch (err) {
+      alert('Failed to load images')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDeleted = (id) => {
+    // ✅ 本地同步删除，不 reload
+    setImages(prev => prev.filter(img => img.id !== id))
+  }
+
+  return (
+    <div style={{ padding: 40 }}>
+      <h2>我的图片</h2>
+
+      {/* ✅ 上传入口（新增） */}
+      <div style={{ marginBottom: 20 }}>
+         <BackToHomeButton />
+        <button onClick={() => navigate('/user/upload')}>
+          上传新图片
+        </button>
+      </div>
+
+      {loading ? (
+        <p>Loading...</p>
+      ) : images.length === 0 ? (
+        <p>你还没有上传任何图片</p>
+      ) : (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, 200px)',
+            gap: 20,
+          }}
+        >
+          {images.map(img => (
+            <MyImageCard
+              key={img.id}
+              image={img}
+              onDeleted={handleDeleted}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 #frontend/src/App.jsx
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useState } from 'react'
@@ -732,6 +1319,10 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Home from './pages/Home'
 import Gallery from './pages/Gallery'
+import UserCenter from './pages/UserCenter'
+import Upload from './pages/Upload'
+
+
 
 export default function App() {
   const [token, setToken] = useState(
@@ -759,6 +1350,14 @@ export default function App() {
       />
 
       <Route
+        path="/user/upload"
+        element={
+          token ? <Upload /> : <Navigate to="/login" />
+        }
+      />
+
+
+      <Route
         path="/home"
         element={
           token
@@ -772,6 +1371,15 @@ export default function App() {
         element={
           token
             ? <Gallery />
+            : <Navigate to="/login" />
+        }
+      />
+
+      <Route
+        path="/user"
+        element={
+          token
+            ? <UserCenter />
             : <Navigate to="/login" />
         }
       />

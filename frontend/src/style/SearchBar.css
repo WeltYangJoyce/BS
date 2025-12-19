@@ -1,0 +1,67 @@
+.tag-bar {
+  margin-bottom: 20px;
+}
+
+.active-tags {
+  margin-bottom: 8px;
+}
+
+.tag-chip {
+  display: inline-block;
+  background: #eee;
+  padding: 4px 8px;
+  margin-right: 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.tag-chip.active {
+  background: #4285f4;
+  color: white;
+}
+
+.tag-chip .remove {
+  margin-left: 4px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.search-wrapper {
+  display: flex;
+  align-items: center;
+}
+
+.search-wrapper input {
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  flex: 1;
+}
+
+.search-wrapper button {
+  margin-left: 6px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: none;
+  background: #4285f4;
+  color: white;
+  cursor: pointer;
+}
+
+.suggestions {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  margin-top: 2px;
+  background: white;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.suggestion-item {
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.suggestion-item:hover {
+  background: #f0f0f0;
+}

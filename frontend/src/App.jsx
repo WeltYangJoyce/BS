@@ -6,6 +6,7 @@ import Register from './pages/Register'
 import Home from './pages/Home'
 import Gallery from './pages/Gallery'
 import UserCenter from './pages/UserCenter'
+import Upload from './pages/Upload'
 
 
 
@@ -35,6 +36,14 @@ export default function App() {
       />
 
       <Route
+        path="/user/upload"
+        element={
+          token ? <Upload /> : <Navigate to="/login" />
+        }
+      />
+
+
+      <Route
         path="/home"
         element={
           token
@@ -53,7 +62,7 @@ export default function App() {
       />
 
       <Route
-        path="/me"
+        path="/user"
         element={
           token
             ? <UserCenter />

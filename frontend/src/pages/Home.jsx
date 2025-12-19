@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 
 export default function Home({ setToken }) {
+  console.log('⚠️ Home rendered')
   const navigate = useNavigate()
   const username = localStorage.getItem('username')
   const handleLogout = () => {
@@ -21,7 +22,7 @@ export default function Home({ setToken }) {
       </button>
 
       <br /><br />
-      <button onClick={() => navigate('/me')}>
+      <button onClick={() => navigate('/user')}>
         My Images
       </button>
       <br/><br/>

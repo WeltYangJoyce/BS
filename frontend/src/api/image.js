@@ -1,18 +1,32 @@
 import api from './api'
 
 // 获取图片列表（支持排序）
-export const fetchImages = (sort = 'time') => {
-  return api.get('/images', {
-    params: { sort },
-  })
+
+export const fetchImages = ({ sort = "time", tags = [] }) => {
+  const params = new URLSearchParams()
+  params.append("sort", sort)
+
+  if (tags.length > 0) {
+    params.append("tag", tags.join(","))
+  }
+
+  return api.get(`/images?${params.toString()}`)
 }
 
+
+
+
 // 上传图片
-export const uploadImage = (file) => {
+// ✅ 直接接收 FormData
+export const uploadImage = (file, tags = "") => {
   const formData = new FormData()
-  formData.append('file', file)
-  return api.post('/images', formData)
+  formData.append("file", file)
+  formData.append("tags", tags)
+
+  return api.post("/images", formData)
 }
+
+
 
 // 删除图片
 export const deleteImage = (id) => {
@@ -32,4 +46,8 @@ export const toggleLike = (id) => {
 // 当前用户图片
 export const fetchMyImages = () => {
   return api.get('/images/mine')
+}
+
+export const fetchTags = () => {
+  return api.get('/tags')
 }

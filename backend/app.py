@@ -6,7 +6,7 @@ from flask_jwt_extended import JWTManager
 from database import init_db, UPLOAD_DIR
 from routes.user_routes import user_bp
 from routes.image_routes import image_bp
-
+from routes.tag_routes import tag_bp
 
 # =============================
 # 创建 Flask App
@@ -41,6 +41,7 @@ init_db()
 
 app.register_blueprint(user_bp, url_prefix="/api")
 app.register_blueprint(image_bp, url_prefix="/api")
+app.register_blueprint(tag_bp,url_prefix="/api")
 
 # =============================
 # 静态文件访问（图片）
