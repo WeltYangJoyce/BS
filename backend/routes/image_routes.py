@@ -16,7 +16,7 @@ from PIL import Image as PILImage
 import exifread
 
 from database import SessionLocal, UPLOAD_DIR
-from models import Image, ImageLike, Tag,image_tags
+from models import Image, ImageLike, Tag,image_tags,User
 from sqlalchemy import func, desc
 
 
@@ -186,10 +186,6 @@ from sqlalchemy import func
 @image_bp.route("/images", methods=["GET"])
 def list_images():
     db: Session = SessionLocal()
-
-    # =============================
-    # 0️⃣ Optional 登录（用于 liked）
-    # =============================
     user_id = None
     try:
         verify_jwt_in_request(optional=True)
@@ -199,94 +195,54 @@ def list_images():
     except Exception:
         pass
 
-    # =============================
-    # 1️⃣ 参数解析
-    # =============================
-    sort = request.args.get("sort", "time")   # time | hot
-    tag_param = request.args.get("tag")       # e.g. "cat,dog"
-    print(tag_param)
-    tag_names = []
-    if tag_param:
-        tag_names = [
-            t.strip()
-            for t in tag_param.split(",")
-            if t.strip()
-        ]
+    sort = request.args.get("sort", "time")
+    tag_param = request.args.get("tag")
+    username_param = request.args.get("username")
+    image_id_param = request.args.get("image_id")  # 新增
+    print(image_id_param)
+    tag_names = [t.strip() for t in tag_param.split(",")] if tag_param else []
 
-    # =============================
-    # 2️⃣ Image 查询
-    # =============================
     query = db.query(Image)
 
-    # 👉 Tag 筛选
-    if tag_names:
-        query = (
-            query
-            .join(Image.tags)
-            .filter(Tag.name.in_(tag_names))
-            .distinct()
+    # 精确 Image ID 查询
+    if image_id_param:
+        if image_id_param.isdigit():
+            query = query.filter(Image.id == int(image_id_param))
+        else:
+            return {"images": [], "error": "Invalid image_id"}, 400
+
+    # 标签筛选
+    elif tag_names:
+        query = query.join(Image.tags).filter(Tag.name.in_(tag_names)).distinct()
+
+    # 用户名筛选
+    elif username_param:
+        query = query.join(User, Image.user).filter(
+            User.username.ilike(f"%{username_param}%")
         )
 
     images = query.all()
 
-    # =============================
-    # 3️⃣ Python 层排序（稳定 & 已验证）
-    # =============================
+    # 排序逻辑
     if sort == "hot":
-        images.sort(
-            key=lambda img: (img.likes or 0) + (img.views or 0),
-            reverse=True
-        )
+        images.sort(key=lambda img: (img.likes or 0) + (img.views or 0), reverse=True)
     else:
-        images.sort(
-            key=lambda img: img.upload_time,
-            reverse=True
-        )
+        images.sort(key=lambda img: img.upload_time, reverse=True)
 
-    # =============================
-    # 4️⃣ liked 状态
-    # =============================
+    # liked 状态
     liked_image_ids = set()
     if user_id:
-        liked_image_ids = {
-            il.image_id
-            for il in (
-                db.query(ImageLike)
-                .filter(ImageLike.user_id == user_id)
-                .all()
-            )
-        }
+        liked_image_ids = {il.image_id for il in db.query(ImageLike).filter(ImageLike.user_id == user_id).all()}
 
-    # =============================
-    # 5️⃣ 🔥 Tag 使用次数（全站）
-    # =============================
-    tag_usage = dict(
-        db.query(
-            Tag.name,
-            func.count(image_tags.c.image_id)
-        )
-        .join(image_tags)
-        .group_by(Tag.id)
-        .all()
-    )
-    # 示例：
-    # { "cat": 12, "travel": 5 }
+    # tag 使用次数
+    tag_usage = dict(db.query(Tag.name, func.count(image_tags.c.image_id))
+                     .join(image_tags)
+                     .group_by(Tag.id)
+                     .all())
 
-    # =============================
-    # 6️⃣ 构造返回数据（含 primary_tag）
-    # =============================
     result = []
-
     for img in images:
-        # ⭐ 主 Tag 选择逻辑
-        if img.tags:
-            primary_tag = max(
-                img.tags,
-                key=lambda t: tag_usage.get(t.name, 0)
-            ).name
-        else:
-            primary_tag = "nullTag"
-
+        primary_tag = max(img.tags, key=lambda t: tag_usage.get(t.name, 0)).name if img.tags else "nullTag"
         result.append({
             "id": img.id,
             "url": f"/uploads/{img.filename}",
@@ -298,10 +254,12 @@ def list_images():
             "liked": img.id in liked_image_ids,
             "upload_time": img.upload_time.isoformat(),
             "tags": [t.name for t in img.tags],
-            "primary_tag": primary_tag,  # ✅ 核心字段
+            "primary_tag": primary_tag,
+            "username": img.user.username
         })
 
     return {"images": result}
+
 
 
 # =============================

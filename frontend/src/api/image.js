@@ -2,12 +2,20 @@ import api from './api'
 
 // 获取图片列表（支持排序）
 
-export const fetchImages = ({ sort = "time", tags = [] }) => {
+export const fetchImages = ({ sort = "time", tags = [], username, image_id }) => {
   const params = new URLSearchParams()
   params.append("sort", sort)
 
-  if (tags.length > 0) {
+  if (tags && tags.length > 0) {
     params.append("tag", tags.join(","))
+  }
+
+  if (username) {
+    params.append("username", username)
+  }
+
+  if (image_id) {
+    params.append("image_id", image_id)
   }
 
   return api.get(`/images?${params.toString()}`)
