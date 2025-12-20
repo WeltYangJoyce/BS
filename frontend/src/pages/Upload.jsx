@@ -3,20 +3,45 @@ import { useNavigate } from "react-router-dom"
 
 import UploadPanel from "../components/UploadPanel"
 import TagSelector from "../components/TagSelector"
-import { uploadImage } from "../api/image"
+import { analyzeImage, uploadImage } from "../api/image"
 
 export default function UploadPage() {
   const [file, setFile] = useState(null)
   const [tags, setTags] = useState("")
+  const [exif, setExif] = useState(null)
+  const [suggestedTags, setSuggestedTags] = useState([])
+  const [analyzing, setAnalyzing] = useState(false)
   const [uploading, setUploading] = useState(false)
 
   const navigate = useNavigate()
 
-  const handleSubmit = async () => {
-    if (!file) {
-      alert("Please select an image first")
-      return
+  // Step 2：EXIF 预分析
+  const handleAnalyze = async () => {
+    if (!file) return
+
+    try {
+      setAnalyzing(true)
+      const res = await analyzeImage(file)
+      setExif(res.data.exif)
+      setSuggestedTags(res.data.suggested_tags || [])
+    } catch (err) {
+      console.error(err)
+      alert("EXIF analyze failed")
+    } finally {
+      setAnalyzing(false)
     }
+  }
+
+  // 推荐 Tag → 加入最终 Tag
+  const addSuggestedTag = (tag) => {
+    const current = tags ? tags.split(",") : []
+    if (current.includes(tag)) return
+    setTags([...current, tag].join(","))
+  }
+
+  // Step 3：最终上传
+  const handleFinalUpload = async () => {
+    if (!file) return
 
     try {
       setUploading(true)
@@ -35,10 +60,16 @@ export default function UploadPage() {
     <div style={{ padding: 40, maxWidth: 600 }}>
       <h2>Upload Image</h2>
 
-      {/* 1️⃣ 选择图片（Drag & Drop / Click） */}
-      <UploadPanel onSelect={setFile} />
+      {/* 1️⃣ 选择图片 */}
+      <UploadPanel
+        onSelect={(f) => {
+          setFile(f)
+          setExif(null)
+          setSuggestedTags([])
+          setTags("")
+        }}
+      />
 
-      {/* 2️⃣ 选中后显示 */}
       {file && (
         <>
           {/* 预览 */}
@@ -55,13 +86,55 @@ export default function UploadPage() {
             />
           </div>
 
-          {/* Tag 选择 */}
+          {/* Step 2：分析 EXIF */}
+          <button
+            onClick={handleAnalyze}
+            disabled={analyzing}
+            style={{ marginTop: 16 }}
+          >
+            {analyzing ? "Analyzing EXIF..." : "Analyze EXIF"}
+          </button>
+
+          {/* EXIF 信息 */}
+          {exif && (
+            <div style={{ marginTop: 16, fontSize: 14 }}>
+              <p>📷 Resolution: {exif.width} × {exif.height}</p>
+              {exif.time && <p>🕒 Time: {exif.time}</p>}
+              {exif.location && <p>📍 Location: {exif.location}</p>}
+            </div>
+          )}
+
+          {/* 推荐 Tag */}
+          {suggestedTags.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <h4>Suggested Tags</h4>
+              {suggestedTags.map(tag => (
+                <button
+                  key={tag}
+                  onClick={() => addSuggestedTag(tag)}
+                  style={{
+                    marginRight: 6,
+                    marginBottom: 6,
+                    padding: "4px 8px",
+                    borderRadius: 12,
+                    background: "#ffe08a",
+                    border: "1px solid #e0b800",
+                    cursor: "pointer",
+                  }}
+                >
+                  #{tag}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* 最终 Tag 选择 */}
           <TagSelector value={tags} onChange={setTags} />
 
-          {/* 操作按钮 */}
+          {/* Step 3：最终上传 */}
           <div style={{ marginTop: 24 }}>
             <button
-              onClick={handleSubmit}
+              onClick={handleFinalUpload}
               disabled={uploading}
               style={{
                 padding: "8px 16px",
@@ -69,21 +142,7 @@ export default function UploadPage() {
                 cursor: uploading ? "not-allowed" : "pointer",
               }}
             >
-              {uploading ? "Uploading..." : "Confirm Upload"}
-            </button>
-
-            <button
-              onClick={() => {
-                setFile(null)
-                setTags("")
-              }}
-              disabled={uploading}
-              style={{
-                marginLeft: 12,
-                padding: "8px 16px",
-              }}
-            >
-              Cancel
+              {uploading ? "Uploading..." : "Confirm & Upload"}
             </button>
           </div>
         </>

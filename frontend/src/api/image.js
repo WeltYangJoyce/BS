@@ -34,6 +34,14 @@ export const uploadImage = (file, tags = "") => {
   return api.post("/images", formData)
 }
 
+// EXIF 预分析（不上传）
+export const analyzeImage = (file) => {
+  const formData = new FormData()
+  formData.append("file", file)
+
+  return api.post("/images/analyze", formData)
+}
+
 
 
 // 删除图片
@@ -58,4 +66,9 @@ export const fetchMyImages = () => {
 
 export const fetchTags = () => {
   return api.get('/tags')
+}
+
+// 轮播专用接口
+export const fetchRecommendedImages = (limit = 5) => {
+  return api.get(`/images/recommend?limit=${limit}`)
 }

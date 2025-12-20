@@ -5,7 +5,8 @@ from werkzeug.utils import secure_filename
 from sqlalchemy import desc
 from sqlalchemy.exc import IntegrityError
 import os
-
+from utils.gps_helper import reverse_geocode
+from utils.thumbs import create_thumbnail
 from flask_jwt_extended import (
     jwt_required,
     get_jwt_identity,
@@ -14,6 +15,7 @@ from flask_jwt_extended import (
 
 from PIL import Image as PILImage
 import exifread
+from utils.exif_tag_helper import generate_exif_tags
 
 from database import SessionLocal, UPLOAD_DIR
 from models import Image, ImageLike, Tag,image_tags,User
@@ -46,6 +48,75 @@ def extract_exif_time(filepath: str) -> str | None:
 
     return None
 
+def extract_exif_gps(filepath: str):
+    """
+    从 EXIF 中提取 GPS 坐标 (lat, lon)
+    返回 (latitude, longitude) 或 None
+    """
+    try:
+        with open(filepath, "rb") as f:
+            tags = exifread.process_file(f, details=False)
+
+        def _convert_to_degrees(value):
+            d = float(value.values[0].num) / float(value.values[0].den)
+            m = float(value.values[1].num) / float(value.values[1].den)
+            s = float(value.values[2].num) / float(value.values[2].den)
+            return d + (m / 60.0) + (s / 3600.0)
+
+        if (
+            "GPS GPSLatitude" in tags and
+            "GPS GPSLatitudeRef" in tags and
+            "GPS GPSLongitude" in tags and
+            "GPS GPSLongitudeRef" in tags
+        ):
+            lat = _convert_to_degrees(tags["GPS GPSLatitude"])
+            if tags["GPS GPSLatitudeRef"].values != "N":
+                lat = -lat
+
+            lon = _convert_to_degrees(tags["GPS GPSLongitude"])
+            if tags["GPS GPSLongitudeRef"].values != "E":
+                lon = -lon
+            
+            return lat, lon
+
+    except Exception as e:
+        print("GPS parse failed:", e)
+
+    return None
+
+def extract_exif_device(filepath: str):
+    """
+    从 EXIF 中提取拍摄设备信息
+    """
+    try:
+        with open(filepath, "rb") as f:
+            tags = exifread.process_file(f, details=False)
+
+        make = tags.get("Image Make")
+        model = tags.get("Image Model")
+
+        return {
+            "make": str(make) if make else None,
+            "model": str(model) if model else None
+        }
+
+    except Exception as e:
+        print("EXIF device parse failed:", e)
+        return None
+
+def format_gps(lat, lon):
+    """
+    将 GPS 坐标格式化为人类可读字符串
+    例：30.2704° N, 120.1182° E
+    """
+    lat_dir = "N" if lat >= 0 else "S"
+    lon_dir = "E" if lon >= 0 else "W"
+
+    lat_str = f"{abs(lat):.4f}° {lat_dir}"
+    lon_str = f"{abs(lon):.4f}° {lon_dir}"
+
+    return f"{lat_str}, {lon_str}"
+
 
 # =============================
 # POST /api/images  上传图片
@@ -59,10 +130,8 @@ import uuid
 def upload_image():
     db: Session = SessionLocal()
     user_id = int(get_jwt_identity())
-    
-    # =============================
-    # 1️⃣ 文件校验
-    # =============================
+
+    # === 1️⃣ 文件校验 ===
     if "file" not in request.files:
         return {"error": "No file provided"}, 400
 
@@ -74,50 +143,36 @@ def upload_image():
     if not allowed_file(file.filename):
         return {"error": "File type not allowed"}, 400
 
-    # 获取文件扩展名
     file_ext = os.path.splitext(file.filename)[1].lower()
-    
-    # =============================
-    # 2️⃣ Tag 解析（可选）
-    # =============================
-    tags_raw = request.form.get("tags", "")
-    tag_names = [
-        t.strip()
-        for t in tags_raw.split(",")
-        if t.strip()
-    ]
 
-    # =============================
-    # 3️⃣ 先创建数据库记录，获取 image.id
-    # =============================
-    # 先创建一个占位的 image 记录
+    # === 2️⃣ 用户确认的 tags ===
+    tags_raw = request.form.get("tags", "")
+    tag_names = [t.strip() for t in tags_raw.split(",") if t.strip()]
+
+    # === 3️⃣ 创建 Image 占位记录 ===
     image = Image(
         user_id=user_id,
-        filename="",  # 稍后填充
-        thumbnail_filename="",  # 稍后填充
+        filename="",
+        thumbnail_filename="",
         resolution_width=0,
         resolution_height=0,
         exif_time=None,
     )
-    
+
     db.add(image)
     db.commit()
     db.refresh(image)
-    
-    # =============================
-    # 4️⃣ 生成统一文件名
-    # =============================
+
+    # === 4️⃣ 生成文件名 ===
+    from datetime import datetime
+    import uuid
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    # 使用 UUID 确保唯一性
     unique_id = uuid.uuid4().hex[:8]
     base_filename = f"User{user_id}_Image{image.id}_{timestamp}_{unique_id}"
-    
-    # 保留原文件扩展名
     new_filename = f"{base_filename}{file_ext}"
-    
-    # =============================
-    # 5️⃣ 保存图片
-    # =============================
+
+    # === 5️⃣ 保存文件 ===
     original_path = os.path.join(UPLOAD_DIR, ORIGINAL_DIR, new_filename)
     os.makedirs(os.path.dirname(original_path), exist_ok=True)
     file.save(original_path)
@@ -125,52 +180,111 @@ def upload_image():
     pil_img = PILImage.open(original_path)
     width, height = pil_img.size
 
+    thumb_filename = f"{base_filename}.jpg"
     thumb_path = os.path.join(UPLOAD_DIR, THUMB_DIR, new_filename)
     os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
-    pil_img.copy().save(thumb_path)
+    create_thumbnail(
+        src_path=original_path,
+        dst_path=thumb_path,
+        max_size=256,
+        quality=80
+    )
 
     exif_time = extract_exif_time(original_path)
-    
-    # =============================
-    # 6️⃣ 更新数据库记录的文件名
-    # =============================
+
+    # === 6️⃣ 更新 Image ===
     image.filename = f"{ORIGINAL_DIR}/{new_filename}"
     image.thumbnail_filename = f"{THUMB_DIR}/{new_filename}"
     image.resolution_width = width
     image.resolution_height = height
     image.exif_time = exif_time
-    
+
+    # === 7️⃣ 绑定 Tag ===
+    for name in tag_names:
+        tag = db.query(Tag).filter(Tag.name == name).first()
+        if not tag:
+            tag = Tag(name=name)
+            db.add(tag)
+            db.flush()
+        image.tags.append(tag)
+
     db.commit()
 
-    # =============================
-    # 7️⃣ 绑定 Tag（核心）
-    # =============================
-    if tag_names:
-        for name in tag_names:
-            tag = (
-                db.query(Tag)
-                .filter(Tag.name == name)
-                .first()
-            )
-            if not tag:
-                tag = Tag(name=name)
-                db.add(tag)
-                db.flush()
-
-            image.tags.append(tag)
-
-        db.commit()
-
-    # =============================
-    # 8️⃣ 返回
-    # =============================
     return {
         "id": image.id,
-        "filename": new_filename,  # 返回新的文件名
         "url": f"/uploads/{image.filename}",
         "thumbnail_url": f"/uploads/{image.thumbnail_filename}",
         "tags": tag_names,
     }
+
+
+@image_bp.route("/images/analyze", methods=["POST"])
+@jwt_required()
+def analyze_image_exif():
+    if "file" not in request.files:
+        return {"error": "No file provided"}, 400
+
+    file = request.files["file"]
+
+    if file.filename == "":
+        return {"error": "Empty filename"}, 400
+
+    if not allowed_file(file.filename):
+        return {"error": "File type not allowed"}, 400
+
+    # === 1️⃣ 用 PIL 读取分辨率（不落盘）===
+    try:
+        pil_img = PILImage.open(file.stream)
+        width, height = pil_img.size
+    except Exception:
+        return {"error": "Invalid image"}, 400
+
+    # === 2️⃣ EXIF 解析（需要临时文件）===
+    import tempfile
+
+    exif_time = None
+    gps = None
+    device_info = None
+
+    with tempfile.NamedTemporaryFile(delete=True) as tmp:
+        file.stream.seek(0)
+        tmp.write(file.stream.read())
+        tmp.flush()
+
+        exif_time = extract_exif_time(tmp.name)
+        gps = extract_exif_gps(tmp.name)
+        device_info = extract_exif_device(tmp.name)
+
+    # === 3️⃣ location 美化 ===
+    location = format_gps(*gps) if gps else None
+
+    gps_info = None
+    if gps:
+        gps_info = {
+            "lat": gps[0],
+            "lon": gps[1],
+        }
+
+    # === 4️⃣ 统一使用 generate_exif_tags ===
+    suggested_tags = generate_exif_tags(
+        exif_time=exif_time,
+        width=width,
+        height=height,
+        gps_info=gps_info,
+        device_info=device_info,
+    )
+
+    return {
+        "exif": {
+            "time": exif_time,
+            "width": width,
+            "height": height,
+            "location": location,
+            "device": device_info,
+        },
+        "suggested_tags": suggested_tags,
+    }
+
 
 # =============================
 # GET /api/images  图片列表（支持排序）
@@ -383,7 +497,7 @@ def list_my_images():
     return {"images": result}
 
 
-    return {"images": result}
+
 
 @image_bp.route("/images/<int:image_id>", methods=["PATCH"])
 @jwt_required()
@@ -464,3 +578,46 @@ def edit_image(image_id: int):
         "width": image.resolution_width,
         "height": image.resolution_height,
     }
+
+# =============================
+# GET /api/images/recommend
+# 轮播专用接口，返回热门/推荐前 N 张图片
+# =============================
+@image_bp.route("/images/recommend", methods=["GET"])
+def recommend_images():
+    db: Session = SessionLocal()
+
+    # 可选：支持前端传 limit
+    limit = request.args.get("limit", 5, type=int)
+
+    # 按热度排序（views + likes）
+    images = db.query(Image).all()
+    images.sort(
+        key=lambda img: (
+            (img.likes or 0) + (img.views or 0),
+            img.likes or 0,
+            img.upload_time
+        ),
+        reverse=True
+    )
+
+    # 取前 N 张
+    images = images[:limit]
+
+    result = []
+    for img in images:
+        primary_tag = img.tags[0].name if img.tags else "nullTag"
+        result.append({
+            "id": img.id,
+            "url": f"/uploads/{img.filename}",
+            "thumbnail_url": f"/uploads/{img.thumbnail_filename}",
+            "width": img.resolution_width,
+            "height": img.resolution_height,
+            "likes": img.likes,
+            "views": img.views,
+            "tags": [t.name for t in img.tags],
+            "primary_tag": primary_tag,
+            "username": img.user.username
+        })
+
+    return {"images": result}
