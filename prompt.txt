@@ -1,74 +1,4 @@
-project/
-│
-├── backend/
-│   │
-│   ├── app.py                     # Flask 入口（✅ 完成）
-│   │
-│   ├── database.py                # DB / Session / UPLOAD_DIR（✅ 完成）
-│   │
-│   ├── models.py                  # User / Image/Tag 模型（✅ 完成）
-│   │
-│   ├── requirements.txt           # 后端依赖（✅ 完成）
-│   │
-│   ├── uploads/                   # 图片文件根目录（✅ 使用中）
-│   │   ├── original/              # 原图存放目录（✅）
-│   │   │   
-│   │   │
-│   │   └── thumbs/                # 缩略图目录（⏭ Phase 5）
-│   │
-│   ├── routes/
-│   │   │
-│   │   ├── __init__.py
-│   │   │
-│   │   ├── user_routes.py         # 注册 / 登录（✅ 完成）
-│   │   |
-|   |   ├── tag_routes.py          
-│   │   └── image_routes.py        # 图片上传 / 列表 / 删除（🔄 闭环中）
-│   
-│
-├── frontend/
-│   │
-│   ├── src/
-│   │   │
-│   │   ├── api/
-│   │   │   ├── api.js
-|   |   |   ├── tag.js
-│   │   │   ├── auth.js            # login / register（✅）
-│   │   │   └── image.js           # fetchImages / uploadImage（🔄）
-│   │   │
-│   │   ├── pages/
-│   │   │   ├── Home.jsx
-|   |   |   ├── Upload.jsx
-|   |   |   ├── UserCenter.jsx
-│   │   │   ├── Login.jsx          # 登录页（✅）
-│   │   │   ├── Register.jsx       # 注册页（✅）
-│   │   │   └── Gallery.jsx        # 图片展示页（🔄）
-│   │   │
-│   │   ├── components/
-|   |   |   ├──BackToHomeButton.jsx
-|   |   |   ├──GalleryGrid.jsx
-|   |   |   ├──ImageCard.jsx
-|   |   |   ├──MyImageCard.jsx
-|   |   |   ├──UploadPanel.jsx
-│   │   │   
-│   │   │   
-│   │   │   
-│   │   │
-│   │   |
-│   │   │   
-│   │   │   
-│   │   │
-│   │   ├── App.jsx                # 路由入口（✅）
-│   │   ├── main.jsx               # React 启动（✅）
-│   │   └── index.css
-│   │
-│   └── package.json
-│
-├── .env                           # 环境变量（⏭ Phase 3）
-├── .gitignore
-└── README.md
-
-# backend/routes/image_routes.py
+#backend/routes/image_routes.py
 # backend/routes/image_routes.py
 from flask import Blueprint, request
 from sqlalchemy.orm import Session
@@ -87,7 +17,7 @@ from PIL import Image as PILImage
 import exifread
 
 from database import SessionLocal, UPLOAD_DIR
-from models import Image, ImageLike, Tag
+from models import Image, ImageLike, Tag,image_tags,User
 from sqlalchemy import func, desc
 
 
@@ -121,12 +51,19 @@ def extract_exif_time(filepath: str) -> str | None:
 # =============================
 # POST /api/images  上传图片
 # =============================
+import os
+from datetime import datetime
+import uuid
+
 @image_bp.route("/images", methods=["POST"])
 @jwt_required()
 def upload_image():
     db: Session = SessionLocal()
     user_id = int(get_jwt_identity())
-
+    
+    # =============================
+    # 1️⃣ 文件校验
+    # =============================
     if "file" not in request.files:
         return {"error": "No file provided"}, 400
 
@@ -138,107 +75,192 @@ def upload_image():
     if not allowed_file(file.filename):
         return {"error": "File type not allowed"}, 400
 
-    filename = secure_filename(file.filename)
+    # 获取文件扩展名
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    
+    # =============================
+    # 2️⃣ Tag 解析（可选）
+    # =============================
+    tags_raw = request.form.get("tags", "")
+    tag_names = [
+        t.strip()
+        for t in tags_raw.split(",")
+        if t.strip()
+    ]
 
-    # 保存原图
-    original_path = os.path.join(UPLOAD_DIR, ORIGINAL_DIR, filename)
+    # =============================
+    # 3️⃣ 先创建数据库记录，获取 image.id
+    # =============================
+    # 先创建一个占位的 image 记录
+    image = Image(
+        user_id=user_id,
+        filename="",  # 稍后填充
+        thumbnail_filename="",  # 稍后填充
+        resolution_width=0,
+        resolution_height=0,
+        exif_time=None,
+    )
+    
+    db.add(image)
+    db.commit()
+    db.refresh(image)
+    
+    # =============================
+    # 4️⃣ 生成统一文件名
+    # =============================
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # 使用 UUID 确保唯一性
+    unique_id = uuid.uuid4().hex[:8]
+    base_filename = f"User{user_id}_Image{image.id}_{timestamp}_{unique_id}"
+    
+    # 保留原文件扩展名
+    new_filename = f"{base_filename}{file_ext}"
+    
+    # =============================
+    # 5️⃣ 保存图片
+    # =============================
+    original_path = os.path.join(UPLOAD_DIR, ORIGINAL_DIR, new_filename)
     os.makedirs(os.path.dirname(original_path), exist_ok=True)
     file.save(original_path)
 
     pil_img = PILImage.open(original_path)
     width, height = pil_img.size
 
-    # Phase 2：缩略图暂用原图
-    thumb_path = os.path.join(UPLOAD_DIR, THUMB_DIR, filename)
+    thumb_path = os.path.join(UPLOAD_DIR, THUMB_DIR, new_filename)
     os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
     pil_img.copy().save(thumb_path)
 
     exif_time = extract_exif_time(original_path)
-
-    image = Image(
-        user_id=user_id,
-        filename=f"{ORIGINAL_DIR}/{filename}",
-        thumbnail_filename=f"{THUMB_DIR}/{filename}",
-        resolution_width=width,
-        resolution_height=height,
-        exif_time=exif_time,
-    )
-
-    db.add(image)
+    
+    # =============================
+    # 6️⃣ 更新数据库记录的文件名
+    # =============================
+    image.filename = f"{ORIGINAL_DIR}/{new_filename}"
+    image.thumbnail_filename = f"{THUMB_DIR}/{new_filename}"
+    image.resolution_width = width
+    image.resolution_height = height
+    image.exif_time = exif_time
+    
     db.commit()
-    db.refresh(image)
 
+    # =============================
+    # 7️⃣ 绑定 Tag（核心）
+    # =============================
+    if tag_names:
+        for name in tag_names:
+            tag = (
+                db.query(Tag)
+                .filter(Tag.name == name)
+                .first()
+            )
+            if not tag:
+                tag = Tag(name=name)
+                db.add(tag)
+                db.flush()
+
+            image.tags.append(tag)
+
+        db.commit()
+
+    # =============================
+    # 8️⃣ 返回
+    # =============================
     return {
         "id": image.id,
+        "filename": new_filename,  # 返回新的文件名
         "url": f"/uploads/{image.filename}",
         "thumbnail_url": f"/uploads/{image.thumbnail_filename}",
+        "tags": tag_names,
     }
-
 
 # =============================
 # GET /api/images  图片列表（支持排序）
 # =============================
+from flask import request
+from flask_jwt_extended import (
+    verify_jwt_in_request,
+    get_jwt_identity
+)
+from sqlalchemy.orm import Session
+from sqlalchemy import func
+
 @image_bp.route("/images", methods=["GET"])
 def list_images():
     db: Session = SessionLocal()
-
-    # 可选登录
     user_id = None
     try:
         verify_jwt_in_request(optional=True)
         identity = get_jwt_identity()
         if identity:
             user_id = int(identity)
-    except:
+    except Exception:
         pass
 
     sort = request.args.get("sort", "time")
-    tag_name = request.args.get("tag")  # ⭐ 新增
+    tag_param = request.args.get("tag")
+    username_param = request.args.get("username")
+    image_id_param = request.args.get("image_id")  # 新增
+    print(image_id_param)
+    tag_names = [t.strip() for t in tag_param.split(",")] if tag_param else []
 
     query = db.query(Image)
 
-    # 🔖 Tag 过滤
-    if tag_name:
-        query = query.join(Image.tags).filter(Tag.name == tag_name)
+    # 精确 Image ID 查询
+    if image_id_param:
+        if image_id_param.isdigit():
+            query = query.filter(Image.id == int(image_id_param))
+        else:
+            return {"images": [], "error": "Invalid image_id"}, 400
+
+    # 标签筛选
+    elif tag_names:
+        query = query.join(Image.tags).filter(Tag.name.in_(tag_names)).distinct()
+
+    # 用户名筛选
+    elif username_param:
+        query = query.join(User, Image.user).filter(
+            User.username.ilike(f"%{username_param}%")
+        )
 
     images = query.all()
 
-    # 🔥 Python 层排序（与你现在一致）
+    # 排序逻辑
     if sort == "hot":
-        images.sort(
-            key=lambda img: (img.likes or 0) + (img.views or 0),
-            reverse=True
-        )
+        images.sort(key=lambda img: (img.likes or 0) + (img.views or 0), reverse=True)
     else:
-        images.sort(
-            key=lambda img: img.upload_time,
-            reverse=True
-        )
+        images.sort(key=lambda img: img.upload_time, reverse=True)
 
+    # liked 状态
     liked_image_ids = set()
     if user_id:
-        liked_image_ids = {
-            il.image_id
-            for il in db.query(ImageLike)
-            .filter(ImageLike.user_id == user_id)
-            .all()
-        }
+        liked_image_ids = {il.image_id for il in db.query(ImageLike).filter(ImageLike.user_id == user_id).all()}
 
-    return {
-        "images": [
-            {
-                "id": img.id,
-                "url": f"/uploads/{img.filename}",
-                "thumbnail_url": f"/uploads/{img.thumbnail_filename}",
-                "likes": img.likes,
-                "views": img.views,
-                "liked": img.id in liked_image_ids,
-                "tags": [t.name for t in img.tags],  # ⭐ 返回 tags
-                "upload_time": img.upload_time.isoformat(),
-            }
-            for img in images
-        ]
-    }
+    # tag 使用次数
+    tag_usage = dict(db.query(Tag.name, func.count(image_tags.c.image_id))
+                     .join(image_tags)
+                     .group_by(Tag.id)
+                     .all())
+
+    result = []
+    for img in images:
+        primary_tag = max(img.tags, key=lambda t: tag_usage.get(t.name, 0)).name if img.tags else "nullTag"
+        result.append({
+            "id": img.id,
+            "url": f"/uploads/{img.filename}",
+            "thumbnail_url": f"/uploads/{img.thumbnail_filename}",
+            "width": img.resolution_width,
+            "height": img.resolution_height,
+            "likes": img.likes,
+            "views": img.views,
+            "liked": img.id in liked_image_ids,
+            "upload_time": img.upload_time.isoformat(),
+            "tags": [t.name for t in img.tags],
+            "primary_tag": primary_tag,
+            "username": img.user.username
+        })
+
+    return {"images": result}
+
 
 
 # =============================
@@ -381,18 +403,48 @@ from models import User
 user_bp = Blueprint("user", __name__)
 
 
+import re
+from flask import Blueprint, request, jsonify
+from werkzeug.security import generate_password_hash
+from sqlalchemy.orm import Session
+from database import SessionLocal
+from models import User
+
+user_bp = Blueprint("user", __name__)
+
+# 简单邮箱正则
+EMAIL_REGEX = re.compile(r"^[\w\.-]+@[\w\.-]+\.\w+$")
+# ASCII + 数字
+ASCII_NUM_REGEX = re.compile(r"^[\x20-\x7E]+$")
+
 @user_bp.route("/register", methods=["POST"])
 def register():
     data = request.get_json()
     if not data:
         return {"error": "Invalid JSON"}, 400
 
-    username = data.get("username")
-    email = data.get("email")
-    password = data.get("password")
+    username = data.get("username", "").strip()
+    email = data.get("email", "").strip()
+    password = data.get("password", "").strip()
 
     if not username or not email or not password:
         return {"error": "Missing fields"}, 400
+
+    # ✅ 长度检查
+    if len(username) < 5:
+        return {"error": "Username must be at least 5 characters"}, 400
+    if len(password) < 5:
+        return {"error": "Password must be at least 5 characters"}, 400
+
+    # ✅ ASCII + 数字校验
+    if not ASCII_NUM_REGEX.match(username):
+        return {"error": "Username must contain only ASCII characters"}, 400
+    if not ASCII_NUM_REGEX.match(password):
+        return {"error": "Password must contain only ASCII characters"}, 400
+
+    # ✅ 简单邮箱格式校验
+    if not EMAIL_REGEX.match(email):
+        return {"error": "Invalid email format"}, 400
 
     db: Session = SessionLocal()
 
@@ -743,22 +795,40 @@ export const register = async (payload) => {
 import api from './api'
 
 // 获取图片列表（支持排序）
-export const fetchImages = ({ sort = 'time', tag = null }) => {
-  return api.get('/images', {
-    params: {
-      sort,
-      tag,
-    },
-  })
+
+export const fetchImages = ({ sort = "time", tags = [], username, image_id }) => {
+  const params = new URLSearchParams()
+  params.append("sort", sort)
+
+  if (tags && tags.length > 0) {
+    params.append("tag", tags.join(","))
+  }
+
+  if (username) {
+    params.append("username", username)
+  }
+
+  if (image_id) {
+    params.append("image_id", image_id)
+  }
+
+  return api.get(`/images?${params.toString()}`)
 }
+
+
 
 
 // 上传图片
-export const uploadImage = (file) => {
+// ✅ 直接接收 FormData
+export const uploadImage = (file, tags = "") => {
   const formData = new FormData()
-  formData.append('file', file)
-  return api.post('/images', formData)
+  formData.append("file", file)
+  formData.append("tags", tags)
+
+  return api.post("/images", formData)
 }
+
+
 
 // 删除图片
 export const deleteImage = (id) => {
@@ -813,6 +883,10 @@ export default function BackToHomeButton() {
 import ImageCard from './ImageCard'
 
 export default function GalleryGrid({ images, onChange }) {
+  if (!images || images.length === 0) {
+    return <p style={{ textAlign: "center", marginTop: 20 }}>暂时没有对应的图片</p>
+  }
+
   return (
     <div
       style={{
@@ -833,12 +907,16 @@ export default function GalleryGrid({ images, onChange }) {
 }
 #frontend/src/components/ImageCard.jsx
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { toggleLike, viewImage } from '../api/image'
+import '../style/image-card.css'
 
 export default function ImageCard({ image, onChange }) {
+  const [hovered, setHovered] = useState(false)
   const [liked, setLiked] = useState(image.liked)
   const [likes, setLikes] = useState(image.likes)
   const [views, setViews] = useState(image.views)
+  const navigate = useNavigate()
 
   const handleView = async () => {
     const res = await viewImage(image.id)
@@ -855,33 +933,47 @@ export default function ImageCard({ image, onChange }) {
   }
 
   return (
-    <div style={{ position: 'relative' }}>
-      <img
-        src={`http://localhost:5000${image.thumbnail_url}`}
-        alt=""
-        style={{ width: 200, height: 200, objectFit: 'cover' }}
-        onClick={() => {
-          handleView()
-          window.open(
-            `http://localhost:5000${image.url}`,
-            '_blank'
-          )
-        }}
-      />
+    <div
+      className={`image-card ${hovered ? 'hovered' : ''}`}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onClick={() => {
+        handleView()
+        window.open(
+          `http://localhost:5000${image.url}`,
+          '_blank'
+        )
+      }}
+    >
+      <img src={`http://localhost:5000${image.thumbnail_url}`} alt="" />
 
-      <div style={{ position: 'absolute', bottom: 8, left: 8 }}>
-        👀 {views}
+      {/* 主 Tag */}
+      <div
+        className="primary-tag"
+        onClick={e => {
+          e.stopPropagation()
+          navigate(`/gallery?tag=${image.primary_tag}`)
+        }}
+      >
+        #{image.primary_tag}
       </div>
 
+      {/* hover tags overlay */}
+      {hovered && (
+        <div className="tag-overlay">
+          {image.tags.map(tag => (
+            <span key={tag} className="tag-chip">
+              #{tag}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* 底部信息 */}
+      <div className="views">👀 {views}</div>
       <div
+        className={`likes ${liked ? 'liked' : ''}`}
         onClick={handleLike}
-        style={{
-          position: 'absolute',
-          bottom: 8,
-          right: 8,
-          cursor: 'pointer',
-          color: liked ? 'red' : '#fff',
-        }}
       >
         ❤️ {likes}
       </div>
@@ -967,109 +1059,377 @@ export default function MyImageCard({ image, onDeleted }) {
     </div>
   )
 }
-#frontend/src/components/UploadPanel.jsx
-export default function UploadPanel({ onUpload, uploading }) {
+#frontend/src/components/SearchBar.jsx
+import { useState } from "react"
+import '../style/SearchBar.css'
+
+export default function TagBar({
+  tags = [],
+  activeTags = [],
+  onToggle,
+  searchInput,
+  setSearchInput,
+  onSearchSubmit,
+  searchType
+}) {
+  const [showSuggestions, setShowSuggestions] = useState(false)
+
+  const handleSuggestionClick = (tagName) => {
+    setSearchInput("")
+    setShowSuggestions(false)
+    onToggle?.(tagName)
+  }
+
+  const handleRemoveTag = (tag) => {
+    onToggle?.(tag)
+  }
+
   return (
-    <div style={{ marginBottom: 20 }}>
+    <div className="tag-bar">
+      {/* active tags only for tag search */}
+      {searchType === "tag" && (
+        <div className="active-tags">
+          {activeTags.map(tag => (
+            <span key={tag} className="tag-chip active">
+              {tag} <span className="remove" onClick={() => handleRemoveTag(tag)}>×</span>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* 搜索输入 + 按钮 */}
+      <div className="search-wrapper">
+        <input
+          type="text"
+          placeholder={
+            searchType === "tag" ? "Search tags..." :
+            searchType === "username" ? "Search username..." :
+            "Search by Image ID..."
+          }
+          value={searchInput}
+          onChange={e => {
+            setSearchInput(e.target.value)
+            if (searchType === "tag") setShowSuggestions(e.target.value.length > 0)
+          }}
+          onFocus={() => setShowSuggestions(searchType === "tag" && searchInput.length > 0)}
+          onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+        />
+        <button onClick={onSearchSubmit}>Search</button>
+      </div>
+
+      {/* 下拉建议 only for tag search */}
+      {showSuggestions && tags.length > 0 && searchType === "tag" && (
+        <div className="suggestions">
+          {tags.map(tag => (
+            <div
+              key={tag.name}
+              className="suggestion-item"
+              onClick={() => handleSuggestionClick(tag.name)}
+            >
+              {tag.name}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+#frontend/src/components/TagSelector.jsx
+import { useEffect, useState } from "react"
+import { fetchTags } from "../api/tag"
+
+export default function TagSelector({ value, onChange }) {
+  const [allTags, setAllTags] = useState([])
+  const [input, setInput] = useState("")
+
+  useEffect(() => {
+    fetchTags().then(res => {
+      setAllTags(res.data.tags.map(t => t.name))
+    })
+  }, [])
+
+  const selected = value ? value.split(",").filter(Boolean) : []
+
+  const addTag = (tag) => {
+    if (selected.includes(tag)) return
+    onChange([...selected, tag].join(","))
+  }
+
+  const removeTag = (tag) => {
+    onChange(selected.filter(t => t !== tag).join(","))
+  }
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && input.trim()) {
+      e.preventDefault()
+      addTag(input.trim())
+      setInput("")
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 20 }}>
+      {/* 已选 Tag */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {selected.map(tag => (
+          <span
+            key={tag}
+            style={{
+              background: "#333",
+              color: "#fff",
+              padding: "4px 8px",
+              borderRadius: 12,
+              cursor: "pointer",
+            }}
+            onClick={() => removeTag(tag)}
+          >
+            #{tag} ✕
+          </span>
+        ))}
+      </div>
+
+      {/* 输入 */}
       <input
+        placeholder="Add tag and press Enter"
+        value={input}
+        onChange={e => setInput(e.target.value)}
+        onKeyDown={handleKeyDown}
+        style={{ marginTop: 10, width: "100%" }}
+      />
+
+      {/* 已有 Tag */}
+      <div style={{ marginTop: 10 }}>
+        {allTags.map(tag => (
+          <button
+            key={tag}
+            onClick={() => addTag(tag)}
+            disabled={selected.includes(tag)}
+            style={{
+              marginRight: 6,
+              marginBottom: 6,
+              padding: "4px 8px",
+              borderRadius: 12,
+              cursor: "pointer",
+            }}
+          >
+            #{tag}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+#frontend/src/components/UploadPanel.jsx
+import { useState, useCallback } from "react"
+
+export default function UploadPanel({ onSelect }) {
+  const [dragging, setDragging] = useState(false)
+
+  const handleFile = (file) => {
+    if (!file) return
+    if (!file.type.startsWith("image/")) {
+      alert("Only image files are allowed")
+      return
+    }
+    onSelect(file)
+  }
+
+  const onDrop = useCallback((e) => {
+    e.preventDefault()
+    setDragging(false)
+
+    const file = e.dataTransfer.files[0]
+    handleFile(file)
+  }, [])
+
+  return (
+    <div
+      onDragOver={(e) => {
+        e.preventDefault()
+        setDragging(true)
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={onDrop}
+      style={{
+        border: "2px dashed #aaa",
+        borderRadius: 8,
+        padding: 40,
+        textAlign: "center",
+        background: dragging ? "#f0f8ff" : "#fafafa",
+        cursor: "pointer",
+      }}
+      onClick={() => document.getElementById("fileInput").click()}
+    >
+      <input
+        id="fileInput"
         type="file"
         accept="image/*"
-        onChange={e => {
-          const file = e.target.files[0]
-          if (file) onUpload(file)
-          e.target.value = ''
-        }}
-        disabled={uploading}
+        style={{ display: "none" }}
+        onChange={(e) => handleFile(e.target.files[0])}
       />
-      {uploading && <p>Uploading...</p>}
+
+      <p style={{ margin: 0, fontSize: 16 }}>
+        {dragging
+          ? "Drop image here"
+          : "Click or Drag image here to select"}
+      </p>
     </div>
   )
 }
 #frontend/src/pages/Gallery.jsx
-import { useEffect, useState, useCallback } from 'react'
-import { fetchImages } from '../api/image'
-import { fetchTags } from '../api/tag'
-import GalleryGrid from '../components/GalleryGrid'
-import BackToHomeButton from '../components/BackToHomeButton'
+import { useEffect, useState } from "react"
+import { useSearchParams } from "react-router-dom"
+import { fetchImages } from "../api/image"
+import { fetchTags } from "../api/tag"
+import GalleryGrid from "../components/GalleryGrid"
+import TagBar from "../components/SearchBar"
+import BackToHomeButton from "../components/BackToHomeButton"
+import '../style/gallery.css'
+
 export default function Gallery() {
   const [images, setImages] = useState([])
   const [tags, setTags] = useState([])
+  const [activeTags, setActiveTags] = useState([])
+  const [sort, setSort] = useState("time")
+  const [searchInput, setSearchInput] = useState("")
+  const [searchType, setSearchType] = useState("tag") // "tag" | "username" | "image_id"
+  const [loading, setLoading] = useState(true)
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  const [sort, setSort] = useState('time')
-  const [activeTag, setActiveTag] = useState(null)
+  // 初始化 activeTags 或 searchType 从 URL
+  useEffect(() => {
+    const tagFromUrl = searchParams.get("tag")
+    const usernameFromUrl = searchParams.get("username")
+    const imageIdFromUrl = searchParams.get("image_id")
 
-  const loadImages = useCallback(() => {
-    fetchImages({ sort, tag: activeTag })
-      .then(res => setImages(res.data.images))
-  }, [sort, activeTag])
+    if (tagFromUrl) {
+      setActiveTags([tagFromUrl])
+      setSearchType("tag")
+    } else if (usernameFromUrl) {
+      setActiveTags([])
+      setSearchType("username")
+    } else if (imageIdFromUrl) {
+      setActiveTags([])
+      setSearchType("image_id")
+    }
+  }, [searchParams])
 
+  // 加载所有 tag
   useEffect(() => {
     fetchTags().then(res => setTags(res.data.tags))
   }, [])
 
+  // 加载图片
+  const loadImages = () => {
+    setLoading(true)
+    const params = {
+      sort,
+      tags: searchType === "tag" ? activeTags : [],
+      username: searchType === "username" ? searchParams.get("username") : undefined,
+      image_id: searchType === "image_id" ? searchParams.get("image_id") : undefined
+    }
+
+    fetchImages(params)
+      .then(res => setImages(res.data.images))
+      .finally(() => setLoading(false))
+  }
+
   useEffect(() => {
     loadImages()
-  }, [loadImages])
+  }, [sort, activeTags, searchParams, searchType])
+
+  // 点击 tag 切换
+  const toggleTag = (name) => {
+    let newActiveTags
+    if (activeTags.includes(name)) {
+      newActiveTags = activeTags.filter(t => t !== name)
+    } else {
+      newActiveTags = [name]
+    }
+    setActiveTags(newActiveTags)
+    setSearchParams({ tag: newActiveTags[0] || "" })
+    setSearchType("tag")
+  }
+
+  // 搜索提交
+  const handleSearchSubmit = () => {
+    if (!searchInput.trim()) return
+
+    if (searchType === "tag") {
+      setActiveTags([searchInput.trim()])
+      setSearchParams({ tag: searchInput.trim() })
+    } else if (searchType === "username") {
+      setActiveTags([])
+      setSearchParams({ username: searchInput.trim() })
+    } else if (searchType === "image_id") {
+      setActiveTags([])
+      setSearchParams({ image_id: searchInput.trim() })
+    }
+    setSearchInput("")
+  }
+
+  // tag 下拉建议过滤
+  const filteredTags = tags.filter(t =>
+    t.name.toLowerCase().includes(searchInput.toLowerCase())
+  )
 
   return (
     <div style={{ padding: 40 }}>
-       <BackToHomeButton />
       <h2>Gallery</h2>
+      <BackToHomeButton />
 
       {/* 排序 */}
-      <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+      <div style={{ marginBottom: 20 }}>
         <button
           onClick={() => setSort("time")}
           style={{
-            padding: "6px 12px",
-            background: sort === "time" ? "#333" : "#eee",
-            color: sort === "time" ? "#fff" : "#000",
-            borderRadius: 4,
-            cursor: "pointer",
+            marginRight: 10,
+            fontWeight: sort === "time" ? "bold" : "normal",
           }}
         >
-          🕒 Time
+          Time
         </button>
-
         <button
           onClick={() => setSort("hot")}
           style={{
-            padding: "6px 12px",
-            background: sort === "hot" ? "#ff6b00" : "#eee",
-            color: sort === "hot" ? "#fff" : "#000",
-            borderRadius: 4,
-            cursor: "pointer",
+            fontWeight: sort === "hot" ? "bold" : "normal",
           }}
         >
-          🔥 Hot
+          Hot
         </button>
       </div>
 
-
-      {/* Tag 筛选 */}
-      <div style={{ margin: '16px 0' }}>
-        <button
-          onClick={() => setActiveTag(null)}
-          style={{ fontWeight: !activeTag ? 'bold' : 'normal' }}
-        >
-          All
-        </button>
-
-        {tags.map(tag => (
-          <button
-            key={tag.id}
-            onClick={() => setActiveTag(tag.name)}
-            style={{
-              marginLeft: 8,
-              fontWeight: activeTag === tag.name ? 'bold' : 'normal'
-            }}
+      {/* 搜索类型选择 */}
+      <div style={{ marginBottom: 10 }}>
+        <label>
+          <select
+            value={searchType}
+            onChange={e => setSearchType(e.target.value)}
           >
-            #{tag.name}
-          </button>
-        ))}
+            <option value="tag">Search by Tag</option>
+            <option value="username">Search by Username</option>
+            <option value="image_id">Search by Image ID</option>
+          </select>
+        </label>
       </div>
 
-      <GalleryGrid images={images} onChange={loadImages} />
+      {/* 搜索栏 */}
+      <TagBar
+        tags={filteredTags}
+        activeTags={activeTags}
+        onToggle={toggleTag}
+        searchInput={searchInput}
+        setSearchInput={setSearchInput}
+        onSearchSubmit={handleSearchSubmit}
+        searchType={searchType}
+      />
+
+      {/* 图片 */}
+      {loading ? (
+        <p>Loading...</p>
+      ) : (
+        <GalleryGrid images={images} />
+      )}
     </div>
   )
 }
@@ -1159,49 +1519,85 @@ export default function Login({setToken}) {
   )
 }
 #frontend/src/pages/Register.jsx
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { register } from '../api/auth'
+
+const ASCII_NUM_REGEX = /^[\x20-\x7E]+$/
+const EMAIL_REGEX = /^[\w.-]+@[\w.-]+\.\w+$/
 
 export default function Register() {
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [errors, setErrors] = useState({ username: '', email: '', password: '', server: '' })
   const navigate = useNavigate()
 
+  // 实时校验
+  useEffect(() => {
+    const newErrors = { username: '', email: '', password: '', server: '' }
+
+    if (username && username.length < 5) newErrors.username = 'Username must be at least 5 characters'
+    else if (username && !ASCII_NUM_REGEX.test(username)) newErrors.username = 'Username must contain only ASCII characters'
+
+    if (password && password.length < 5) newErrors.password = 'Password must be at least 5 characters'
+    else if (password && !ASCII_NUM_REGEX.test(password)) newErrors.password = 'Password must contain only ASCII characters'
+
+    if (email && !EMAIL_REGEX.test(email)) newErrors.email = 'Invalid email format'
+
+    setErrors(prev => ({ ...prev, ...newErrors }))
+  }, [username, email, password])
+
   const handleRegister = async () => {
+    setErrors(prev => ({ ...prev, server: '' }))
+
+    // 最终提交前校验
+    if (errors.username || errors.password || errors.email) return
+
+    if (!username || !email || !password) {
+      setErrors(prev => ({ ...prev, server: 'Please fill in all fields' }))
+      return
+    }
+
     try {
       await register({ username, email, password })
       alert('Register success')
       navigate('/login')
-    } catch {
-      alert('Register failed')
+    } catch (err) {
+      setErrors(prev => ({ ...prev, server: err.response?.data?.error || 'Register failed' }))
     }
   }
 
   return (
     <div style={{ padding: 40 }}>
       <h2>Register</h2>
-      <input
-        placeholder="Username"
-        value={username}
-        onChange={e => setUsername(e.target.value)}
-      />
-      <br />
-      <input
-        placeholder="Email"
-        value={email}
-        onChange={e => setEmail(e.target.value)}
-      />
-      <br />
-      <input
-        type="password"
-        placeholder="Password"
-        value={password}
-        onChange={e => setPassword(e.target.value)}
-      />
-      <br />
-      <button onClick={handleRegister}>Register</button>
+      <div>
+        <input
+          placeholder="Username"
+          value={username}
+          onChange={e => setUsername(e.target.value)}
+        />
+        {errors.username && <p style={{ color: 'red', margin: 0 }}>{errors.username}</p>}
+      </div>
+      <div>
+        <input
+          placeholder="Email"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+        />
+        {errors.email && <p style={{ color: 'red', margin: 0 }}>{errors.email}</p>}
+      </div>
+      <div>
+        <input
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+        />
+        {errors.password && <p style={{ color: 'red', margin: 0 }}>{errors.password}</p>}
+      </div>
+      <button onClick={handleRegister} style={{ marginTop: 10 }}>Register</button>
+      {errors.server && <p style={{ color: 'red' }}>{errors.server}</p>}
       <p>
         Already have an account? <Link to="/login">Login</Link>
       </p>
@@ -1209,37 +1605,96 @@ export default function Register() {
   )
 }
 #frontend/src/pages/Upload.jsx
-import { useState } from 'react'
-import UploadPanel from '../components/UploadPanel'
-import { uploadImage } from '../api/image'
-import { useNavigate } from 'react-router-dom'
+import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 
-export default function Upload() {
+import UploadPanel from "../components/UploadPanel"
+import TagSelector from "../components/TagSelector"
+import { uploadImage } from "../api/image"
+
+export default function UploadPage() {
+  const [file, setFile] = useState(null)
+  const [tags, setTags] = useState("")
   const [uploading, setUploading] = useState(false)
+
   const navigate = useNavigate()
 
-  const handleUpload = async (file) => {
+  const handleSubmit = async () => {
+    if (!file) {
+      alert("Please select an image first")
+      return
+    }
+
     try {
       setUploading(true)
-      await uploadImage(file)
-      alert('Upload success')
-      console.log('👉 upload success, navigating to /user')
-      navigate('/user',{replace : true}) // 上传完成后回到用户中心
+      await uploadImage(file, tags)
+      alert("Upload success")
+      navigate("/user")
     } catch (err) {
-      alert('Upload failed')
+      console.error(err)
+      alert("Upload failed")
     } finally {
       setUploading(false)
     }
   }
 
   return (
-    <div style={{ padding: 40 }}>
+    <div style={{ padding: 40, maxWidth: 600 }}>
       <h2>Upload Image</h2>
 
-      <UploadPanel
-        onUpload={handleUpload}
-        uploading={uploading}
-      />
+      {/* 1️⃣ 选择图片（Drag & Drop / Click） */}
+      <UploadPanel onSelect={setFile} />
+
+      {/* 2️⃣ 选中后显示 */}
+      {file && (
+        <>
+          {/* 预览 */}
+          <div style={{ marginTop: 20 }}>
+            <img
+              src={URL.createObjectURL(file)}
+              alt="preview"
+              style={{
+                maxWidth: "100%",
+                maxHeight: 300,
+                borderRadius: 8,
+                border: "1px solid #ddd",
+              }}
+            />
+          </div>
+
+          {/* Tag 选择 */}
+          <TagSelector value={tags} onChange={setTags} />
+
+          {/* 操作按钮 */}
+          <div style={{ marginTop: 24 }}>
+            <button
+              onClick={handleSubmit}
+              disabled={uploading}
+              style={{
+                padding: "8px 16px",
+                fontSize: 16,
+                cursor: uploading ? "not-allowed" : "pointer",
+              }}
+            >
+              {uploading ? "Uploading..." : "Confirm Upload"}
+            </button>
+
+            <button
+              onClick={() => {
+                setFile(null)
+                setTags("")
+              }}
+              disabled={uploading}
+              style={{
+                marginLeft: 12,
+                padding: "8px 16px",
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </>
+      )}
     </div>
   )
 }

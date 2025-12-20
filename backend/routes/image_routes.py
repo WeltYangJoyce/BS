@@ -225,9 +225,17 @@ def list_images():
 
     # 排序逻辑
     if sort == "hot":
-        images.sort(key=lambda img: (img.likes or 0) + (img.views or 0), reverse=True)
+        images.sort(
+            key=lambda img: (
+                (img.likes or 0) + (img.views or 0),  # hot程度
+                img.likes or 0,                        # likes多的优先
+                img.upload_time                         # 上传晚的优先
+            ),
+            reverse=True  # 倒序，让最大值在前
+        )
     else:
         images.sort(key=lambda img: img.upload_time, reverse=True)
+
 
     # liked 状态
     liked_image_ids = set()
@@ -369,6 +377,90 @@ def list_my_images():
             "likes": img.likes,
             "views": img.views,
             "upload_time": img.upload_time.isoformat(),
+            "tags": [t.name for t in img.tags],  # ✅ 添加 tags
+            "primary_tag": img.tags[0].name if img.tags else "nullTag",
         })
+    return {"images": result}
+
 
     return {"images": result}
+
+@image_bp.route("/images/<int:image_id>", methods=["PATCH"])
+@jwt_required()
+def edit_image(image_id: int):
+    db: Session = SessionLocal()
+    user_id = int(get_jwt_identity())
+
+    image = db.query(Image).filter(Image.id == image_id).first()
+    if not image:
+        return {"error": "Image not found"}, 404
+
+    if image.user_id != user_id:
+        return {"error": "Forbidden"}, 403
+
+    # 处理 tags
+    tags_raw = request.form.get("tags")
+    if tags_raw is not None:
+        tag_names = [t.strip() for t in tags_raw.split(",") if t.strip()]
+        new_tags = []
+        for name in tag_names:
+            tag = db.query(Tag).filter(Tag.name == name).first()
+            if not tag:
+                tag = Tag(name=name)
+                db.add(tag)
+                db.flush()
+            new_tags.append(tag)
+        image.tags = new_tags  # 替换原有 tags
+
+    # 处理文件替换
+    if "file" in request.files:
+        file = request.files["file"]
+        if file.filename == "":
+            return {"error": "Empty filename"}, 400
+        if not allowed_file(file.filename):
+            return {"error": "File type not allowed"}, 400
+
+        # 删除原文件
+        for path in [image.filename, image.thumbnail_filename]:
+            full_path = os.path.join(UPLOAD_DIR, path)
+            if os.path.exists(full_path):
+                os.remove(full_path)
+
+        # 保存新文件
+        file_ext = os.path.splitext(file.filename)[1].lower()
+        from datetime import datetime
+        import uuid
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        unique_id = uuid.uuid4().hex[:8]
+        base_filename = f"User{user_id}_Image{image.id}_{timestamp}_{unique_id}"
+        new_filename = f"{base_filename}{file_ext}"
+
+        original_path = os.path.join(UPLOAD_DIR, ORIGINAL_DIR, new_filename)
+        os.makedirs(os.path.dirname(original_path), exist_ok=True)
+        file.save(original_path)
+
+        pil_img = PILImage.open(original_path)
+        width, height = pil_img.size
+
+        thumb_path = os.path.join(UPLOAD_DIR, THUMB_DIR, new_filename)
+        os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
+        pil_img.copy().save(thumb_path)
+
+        exif_time = extract_exif_time(original_path)
+
+        image.filename = f"{ORIGINAL_DIR}/{new_filename}"
+        image.thumbnail_filename = f"{THUMB_DIR}/{new_filename}"
+        image.resolution_width = width
+        image.resolution_height = height
+        image.exif_time = exif_time
+
+    db.commit()
+
+    return {
+        "id": image.id,
+        "url": f"/uploads/{image.filename}",
+        "thumbnail_url": f"/uploads/{image.thumbnail_filename}",
+        "tags": [t.name for t in image.tags],
+        "width": image.resolution_width,
+        "height": image.resolution_height,
+    }

@@ -41,7 +41,7 @@ export default function UserCenter() {
         </button>
       </div>
 
-      {loading ? (
+      {loading ? (  
         <p>Loading...</p>
       ) : images.length === 0 ? (
         <p>你还没有上传任何图片</p>

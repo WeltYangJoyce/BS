@@ -7,7 +7,7 @@ import Home from './pages/Home'
 import Gallery from './pages/Gallery'
 import UserCenter from './pages/UserCenter'
 import Upload from './pages/Upload'
-
+import EditImagePage from './pages/Edit'
 
 
 export default function App() {
@@ -41,6 +41,12 @@ export default function App() {
           token ? <Upload /> : <Navigate to="/login" />
         }
       />
+
+      <Route
+        path="/user/edit/:imageId"
+        element={ token ? <EditImagePage /> : <Navigate to="/login" /> }
+      />
+
 
 
       <Route

@@ -9,18 +9,48 @@ from models import User
 user_bp = Blueprint("user", __name__)
 
 
+import re
+from flask import Blueprint, request, jsonify
+from werkzeug.security import generate_password_hash
+from sqlalchemy.orm import Session
+from database import SessionLocal
+from models import User
+
+user_bp = Blueprint("user", __name__)
+
+# 简单邮箱正则
+EMAIL_REGEX = re.compile(r"^[\w\.-]+@[\w\.-]+\.\w+$")
+# ASCII + 数字
+ASCII_NUM_REGEX = re.compile(r"^[\x20-\x7E]+$")
+
 @user_bp.route("/register", methods=["POST"])
 def register():
     data = request.get_json()
     if not data:
         return {"error": "Invalid JSON"}, 400
 
-    username = data.get("username")
-    email = data.get("email")
-    password = data.get("password")
+    username = data.get("username", "").strip()
+    email = data.get("email", "").strip()
+    password = data.get("password", "").strip()
 
     if not username or not email or not password:
         return {"error": "Missing fields"}, 400
+
+    # ✅ 长度检查
+    if len(username) < 5:
+        return {"error": "Username must be at least 5 characters"}, 400
+    if len(password) < 5:
+        return {"error": "Password must be at least 5 characters"}, 400
+
+    # ✅ ASCII + 数字校验
+    if not ASCII_NUM_REGEX.match(username):
+        return {"error": "Username must contain only ASCII characters"}, 400
+    if not ASCII_NUM_REGEX.match(password):
+        return {"error": "Password must contain only ASCII characters"}, 400
+
+    # ✅ 简单邮箱格式校验
+    if not EMAIL_REGEX.match(email):
+        return {"error": "Invalid email format"}, 400
 
     db: Session = SessionLocal()
 
