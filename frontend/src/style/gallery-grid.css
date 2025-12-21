@@ -1,0 +1,128 @@
+/* ===== GalleryGrid 容器 ===== */
+.gallery-grid {
+  display: grid;
+  gap: 16px; /* 图片间距 */
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  justify-items: stretch; /* 每列拉伸占满 */
+  padding: 16px;
+}
+
+/* ===== 手机端优化 ===== */
+@media (max-width: 768px) {
+  .gallery-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 12px;
+  }
+}
+
+/* ===== ImageCard 基础 ===== */
+.image-card {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  background: #fff;
+  transition: transform 0.2s, box-shadow 0.2s;
+  width: 100%; /* 100% 宽度自适应网格 */
+}
+
+.image-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.card-img {
+  width: 100%;
+  height: auto;
+  display: block;
+  transition: filter 0.3s;
+}
+
+/* ===== Hover 整图虚化 ===== */
+.image-card.hovered .card-img {
+  filter: blur(4px) brightness(0.7);
+}
+
+/* ===== Tag Overlay 居中显示 ===== */
+.tag-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+
+.image-card.hovered .tag-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ===== Tag 样式 ===== */
+.tag-chip {
+  background: rgba(255, 255, 255, 0.8);
+  color: #333;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-weight: 500;
+  font-size: 13px;
+  transition: background 0.2s;
+}
+
+.tag-chip:hover {
+  background: rgba(255, 255, 255, 1);
+}
+
+/* ===== 主 Tag ===== */
+.primary-tag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.primary-tag:hover {
+  background: rgba(255, 255, 255, 1);
+}
+
+/* ===== 底部信息 ===== */
+.views, .likes {
+  position: absolute;
+  bottom: 8px;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.views { left: 8px; }
+.likes { right: 8px; cursor: pointer; transition: transform 0.2s; }
+.likes.liked { color: red; transform: scale(1.2); }
+
+/* ===== 手机端优化 ===== */
+@media (max-width: 768px) {
+  .image-card.hovered .card-img {
+    filter: none; /* 手机端不虚化 */
+  }
+
+  .tag-overlay {
+    top: auto;
+    bottom: 40px;
+    left: 0;
+    transform: none;
+    opacity: 1;
+    justify-content: flex-start;
+    pointer-events: auto;
+  }
+}

@@ -179,6 +179,7 @@ export default function TagSelector({
                   borderRadius: 12,
                   cursor: "pointer",
                   border: "1px solid #ccc",
+                  color:"black",
                   background: "#fff",
                   fontSize: 13,
                 }}

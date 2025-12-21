@@ -1,82 +1,108 @@
+/* ===== ImageCard 基础 ===== */
 .image-card {
   position: relative;
-  width: 200px;
-  height: 200px;
+  border-radius: 12px;
   overflow: hidden;
-  transition: transform 0.2s ease;
+  cursor: pointer;
+  background: #fff;
+  transition: transform 0.2s, box-shadow 0.2s;
 }
 
-.image-card img {
+.image-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+}
+
+.card-img {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.3s ease, filter 0.3s ease;
+  height: auto;
+  display: block;
+  transition: filter 0.3s;
 }
 
-/* hover 动画 */
-.image-card.hovered {
-  transform: scale(1.03); /* 整体微放大 */
+/* ===== Hover 整图虚化 ===== */
+.image-card.hovered .card-img {
+  filter: blur(4px) brightness(0.7);
 }
 
-.image-card.hovered img {
-  filter: blur(4px); /* 背景虚化 */
-  transform: scale(1.05); /* 图片微放大 */
+/* ===== Tag Overlay 居中显示 ===== */
+.tag-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
 }
 
-/* 主 Tag */
-.image-card .primary-tag {
+.image-card.hovered .tag-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ===== Tag 样式 ===== */
+.tag-chip {
+  background: rgba(255,255,255,0.8);
+  color: #333;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-weight: 500;
+  font-size: 13px;
+  transition: background 0.2s;
+}
+
+.tag-chip:hover {
+  background: rgba(255,255,255,1);
+}
+
+/* ===== 主 Tag ===== */
+.primary-tag {
   position: absolute;
   top: 8px;
   left: 8px;
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 12px;
-  cursor: pointer;
-  z-index: 2; /* 保证在图片上方 */
-}
-
-/* hover tags overlay */
-.image-card .tag-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 10px;
-  z-index: 1;
-  pointer-events: none; /* 避免阻止点击 */
-}
-
-.image-card .tag-chip {
-  background: rgba(0, 0, 0, 0.7);
-  color: #fff;
-  padding: 4px 8px;
+  background: rgba(255,255,255,0.8);
+  padding: 4px 10px;
   border-radius: 12px;
   font-size: 12px;
-}
-
-.image-card .views {
-  position: absolute;
-  bottom: 8px;
-  left: 8px;
-  color: #fff;
-  font-size: 12px;
-  z-index: 2;
-}
-
-.image-card .likes {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
+  font-weight: bold;
   cursor: pointer;
-  font-size: 12px;
-  z-index: 2;
 }
 
-.image-card .likes.liked {
-  color: red;
+.primary-tag:hover {
+  background: rgba(255,255,255,1);
+}
+
+/* ===== 底部信息 ===== */
+.views, .likes {
+  position: absolute;
+  bottom: 8px;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.8);
+}
+
+.views { left: 8px; }
+.likes { right: 8px; cursor: pointer; transition: transform 0.2s; }
+.likes.liked { color: red; transform: scale(1.2); }
+
+/* ===== 手机端优化 ===== */
+@media (max-width: 768px) {
+  .image-card.hovered .card-img {
+    filter: none; /* 手机端不虚化 */
+  }
+  .tag-overlay {
+    top: auto;
+    bottom: 40px;
+    left: 0;
+    transform: none;
+    opacity: 1;
+    justify-content: flex-start;
+    pointer-events: auto;
+  }
 }

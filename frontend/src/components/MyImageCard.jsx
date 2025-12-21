@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { deleteImage } from '../api/image';
 import { useNavigate } from 'react-router-dom';
-import '../style/image-card.css';
+import '../style/my-image-card.css';
 
 export default function MyImageCard({ image, onDeleted }) {
   const [hovered, setHovered] = useState(false);

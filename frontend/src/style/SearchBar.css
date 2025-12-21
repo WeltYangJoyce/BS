@@ -1,67 +1,142 @@
 .tag-bar {
-  margin-bottom: 20px;
+  margin-bottom: 16px;
+  position: relative;
 }
 
 .active-tags {
-  margin-bottom: 8px;
-}
-
-.tag-chip {
-  display: inline-block;
-  background: #eee;
-  padding: 4px 8px;
-  margin-right: 6px;
-  border-radius: 4px;
-  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
 }
 
 .tag-chip.active {
-  background: #4285f4;
+  background: #007bff;
   color: white;
-}
-
-.tag-chip .remove {
-  margin-left: 4px;
-  font-weight: bold;
-  cursor: pointer;
-}
-
-.search-wrapper {
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
   display: flex;
   align-items: center;
 }
 
-.search-wrapper input {
-  padding: 6px 10px;
-  border-radius: 4px;
-  border: 1px solid #ccc;
-  flex: 1;
-}
-
-.search-wrapper button {
-  margin-left: 6px;
-  padding: 6px 12px;
-  border-radius: 4px;
-  border: none;
-  background: #4285f4;
-  color: white;
+.tag-chip .remove {
+  margin-left: 4px;
   cursor: pointer;
 }
 
-.suggestions {
+/* Search Wrapper */
+.search-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 1100px;
+  min-width: 200px;
+  margin: 0 auto;
+}
+
+/* 自定义下拉 */
+.search-type-dropdown {
+  flex: 0 0 120px;
+  padding: 8px 12px;
   border: 1px solid #ccc;
-  border-radius: 4px;
-  margin-top: 2px;
-  background: white;
-  max-height: 150px;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  user-select: none;
+  font-size: 14px;
+  position: relative;
+}
+
+.arrow {
+  transition: transform 0.3s ease;
+}
+
+.arrow.up {
+  transform: rotate(180deg);
+}
+
+/* 下拉菜单动画 */
+.dropdown-menu {
+  position: absolute;
+  top: 110%;
+  left: 0;
+  width: 100%;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.3s ease;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  z-index: 20;
+}
+
+.dropdown-item {
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.dropdown-item:hover {
+  background: #f0f0f0;
+}
+
+/* 输入框 */
+.search-wrapper input {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-size: 14px;
+}
+
+/* 搜索按钮 */
+.search-wrapper button {
+  flex: 0 0 120px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: none;
+  background: #007bff;
+  color: white;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.search-wrapper button:hover {
+  background: #0056b3;
+}
+
+/* Suggestions */
+.suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 100%;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  max-height: 180px;
   overflow-y: auto;
+  z-index: 10;
 }
 
 .suggestion-item {
-  padding: 6px 10px;
+  padding: 6px 12px;
   cursor: pointer;
 }
 
 .suggestion-item:hover {
   background: #f0f0f0;
 }
+
+/* 响应式：小屏幕纵向排列 */
+/* 响应式：手机端纵向排列，小巧尺寸 */
+/* 基本样式同之前，不变 */
+
+/* 响应式：手机端纵向排列，小巧宽度 */
+/* 移动端：三个元素纵向排列 */
+

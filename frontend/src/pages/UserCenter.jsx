@@ -3,6 +3,7 @@ import { fetchMyImages } from '../api/image'
 import MyImageCard from '../components/MyImageCard'
 import { useNavigate } from 'react-router-dom'
 import BackToHomeButton from '../components/BackToHomeButton'
+import "../style/user-center.css"
 export default function UserCenter() {
   const [images, setImages] = useState([])
   const [loading, setLoading] = useState(true)
@@ -30,38 +31,24 @@ export default function UserCenter() {
   }
 
   return (
-    <div style={{ padding: 40 }}>
-      <h2>我的图片</h2>
-
-      {/* ✅ 上传入口（新增） */}
-      <div style={{ marginBottom: 20 }}>
-         <BackToHomeButton />
-        <button onClick={() => navigate('/user/upload')}>
-          上传新图片
-        </button>
-      </div>
-
-      {loading ? (  
-        <p>Loading...</p>
-      ) : images.length === 0 ? (
-        <p>你还没有上传任何图片</p>
-      ) : (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, 200px)',
-            gap: 20,
-          }}
-        >
-          {images.map(img => (
-            <MyImageCard
-              key={img.id}
-              image={img}
-              onDeleted={handleDeleted}
-            />
-          ))}
-        </div>
-      )}
+    <div className="user-center-container">
+  <h2>我的图片</h2>
+  <div className="upload-section">
+    <BackToHomeButton />
+    <button onClick={() => navigate('/user/upload')}>上传新图片</button>
+  </div>
+  {loading ? (
+    <p>Loading...</p>
+  ) : images.length === 0 ? (
+    <p>你还没有上传任何图片</p>
+  ) : (
+    <div className="my-images-grid">
+      {images.map(img => (
+        <MyImageCard key={img.id} image={img} onDeleted={handleDeleted} />
+      ))}
     </div>
+  )}
+</div>
+
   )
 }

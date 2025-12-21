@@ -1,0 +1,230 @@
+/* ==============================
+   Global Reset
+============================== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+.gallery-title {
+  text-align: center;
+  margin-bottom: 16px; /* 可选，增加下方间距 */
+}
+
+
+/* ==============================
+   Gallery Container
+============================== */
+.gallery-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  min-height: 100vh;
+  background: 
+    linear-gradient(rgba(245, 247, 250, 0.85), rgba(195, 207, 226, 0.85)),
+    url('/pexels-rovenimages-com-344613-949587.jpg') center/cover no-repeat;
+  display: block;
+  flex-direction: column;
+  align-items: stretch; /* 保证子元素宽度充满容器 */
+}
+
+.back-home {
+  display: inline-block; /* 让它根据内容自适应宽度 */
+  margin-bottom: 16px;
+  padding: 6px 12px;      /* 调整按钮大小 */
+  background: #f9f9f9;
+  color: black;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: center;
+  font-size: 14px;
+  align-self: flex-start;
+  transition: all 0.2s;
+}
+
+.back-home:hover {
+  background: #e6e6e6;
+}
+
+/* ==============================
+   Carousel Wrapper
+============================== */
+.carousel-wrapper {
+  margin: 20px 0;
+  text-align: center;
+}
+
+.carousel-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: #333;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+/* ==============================
+   Sort Buttons
+============================== */
+.sort-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.sort-buttons button {
+  padding: 6px 12px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: #f9f9f9;
+  color: black;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sort-buttons button:hover {
+  background: #e6e6e6;
+}
+
+/* ==============================
+   Gallery Grid
+============================== */
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  width: 100%; /* 关键：填满父容器 */
+  padding: 16px 0;
+}
+
+/* ==============================
+   Image Card
+============================== */
+.image-card {
+  position: relative;
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  background: rgba(255,255,255,0.9);
+  transition: transform 0.2s, box-shadow 0.2s;
+  padding: 10px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.image-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+}
+
+.card-img {
+  width: 100%;
+  height: auto;
+  display: block;
+  transition: filter 0.3s;
+}
+
+.image-card.hovered .card-img {
+  filter: blur(4px) brightness(0.7);
+}
+
+/* ===== Tag Overlay ===== */
+.tag-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+
+.image-card.hovered .tag-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ===== Tag 样式 ===== */
+.tag-chip {
+  background: rgba(255,255,255,0.8);
+  color: #333;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-weight: 500;
+  font-size: 13px;
+  transition: background 0.2s;
+}
+
+.tag-chip:hover {
+  background: rgba(255,255,255,1);
+}
+
+/* ===== 主 Tag ===== */
+.primary-tag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: rgba(255,255,255,0.8);
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.primary-tag:hover {
+  background: rgba(255,255,255,1);
+}
+
+/* ===== 底部信息 ===== */
+.views, .likes {
+  position: absolute;
+  bottom: 8px;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.8);
+}
+
+.views { left: 8px; }
+.likes { right: 8px; cursor: pointer; transition: transform 0.2s; }
+.likes.liked { color: red; transform: scale(1.2); }
+
+/* ==============================
+   Responsive
+============================== */
+@media (max-width: 768px) {
+  .gallery-container {
+    padding: 8px;
+  }
+
+  .sort-buttons {
+    flex-wrap: wrap;
+  }
+
+  .gallery-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 12px 0;
+  }
+
+  .image-card.hovered .card-img {
+    filter: none; /* 手机端不虚化 */
+  }
+
+  .tag-overlay {
+    top: auto;
+    bottom: 40px;
+    left: 0;
+    transform: none;
+    opacity: 1;
+    justify-content: flex-start;
+    pointer-events: auto;
+  }
+}

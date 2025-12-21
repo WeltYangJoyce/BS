@@ -16,7 +16,7 @@ export default function ImageCard({ image, onChange }) {
     onChange?.()
   }
 
-  const handleLike = async (e) => {
+  const handleLike = async e => {
     e.stopPropagation()
     const res = await toggleLike(image.id)
     setLiked(res.data.liked)
@@ -31,13 +31,10 @@ export default function ImageCard({ image, onChange }) {
       onMouseLeave={() => setHovered(false)}
       onClick={() => {
         handleView()
-        window.open(
-          `http://localhost:5000${image.url}`,
-          '_blank'
-        )
+        window.open(`http://localhost:5000${image.url}`, '_blank')
       }}
     >
-      <img src={`http://localhost:5000${image.thumbnail_url}`} alt="" />
+      <img src={`http://localhost:5000${image.thumbnail_url}`} alt="" className="card-img" />
 
       {/* 主 Tag */}
       <div
@@ -51,22 +48,17 @@ export default function ImageCard({ image, onChange }) {
       </div>
 
       {/* hover tags overlay */}
-      {hovered && (
-        <div className="tag-overlay">
-          {image.tags.map(tag => (
-            <span key={tag} className="tag-chip">
-              #{tag}
-            </span>
-          ))}
-        </div>
-      )}
+      <div className="tag-overlay">
+        {image.tags.map(tag => (
+          <span key={tag} className="tag-chip">
+            #{tag}
+          </span>
+        ))}
+      </div>
 
       {/* 底部信息 */}
       <div className="views">👀 {views}</div>
-      <div
-        className={`likes ${liked ? 'liked' : ''}`}
-        onClick={handleLike}
-      >
+      <div className={`likes ${liked ? 'liked' : ''}`} onClick={handleLike}>
         ❤️ {likes}
       </div>
     </div>

@@ -1,0 +1,137 @@
+/* ==============================
+   UploadPage Container
+============================== */
+.upload-page-container {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 40px;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+
+  /* 背景渐变 + 图片可选叠加 */
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  border-radius: 12px;
+}
+
+/* 标题 */
+.upload-page-container h2 {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+/* 图片预览 */
+.upload-preview {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.upload-preview img {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  object-fit: cover;
+}
+
+/* 分析按钮 */
+.analyze-button,
+.upload-button {
+  margin-top: 16px;
+  padding: 8px 16px;
+  font-size: 14px;
+  border: none;
+  border-radius: 6px;
+  background-color: #4a90e2;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.analyze-button:hover:not(:disabled),
+.upload-button:hover:not(:disabled) {
+  background-color: #357abd;
+}
+
+.analyze-button:disabled,
+.upload-button:disabled {
+  background-color: #a0c4f5;
+  cursor: not-allowed;
+}
+
+/* EXIF 信息 */
+.exif-info {
+  margin-top: 16px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #333;
+}
+
+/* 推荐 Tag */
+.suggested-tags {
+  margin-top: 16px;
+}
+
+.suggested-tags h4 {
+  margin-bottom: 8px;
+}
+
+.suggested-tags button {
+  margin-right: 6px;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  background: #ffe08a;
+  border: 1px solid #e0b800;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.suggested-tags button:hover {
+  background: #ffd54f;
+  transform: scale(1.05);
+}
+
+/* TagSelector 输入框 */
+.tag-selector {
+  margin-top: 16px;
+}
+
+.tag-selector input {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 14px;
+  outline: none;
+  transition: border 0.2s;
+}
+
+.tag-selector input:focus {
+  border-color: #4a90e2;
+}
+
+/* 上传确认按钮 */
+.upload-confirm {
+  margin-top: 24px;
+  text-align: center;
+}
+
+.upload-confirm button {
+  padding: 10px 20px;
+  font-size: 16px;
+  border-radius: 6px;
+  border: none;
+  background-color: #4a90e2;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.upload-confirm button:hover:not(:disabled) {
+  background-color: #357abd;
+}
+
+.upload-confirm button:disabled {
+  background-color: #a0c4f5;
+  cursor: not-allowed;
+}

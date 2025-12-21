@@ -1,0 +1,50 @@
+/* ==============================
+   UserCenter Container
+============================== */
+.user-center-container {
+  padding: 40px;
+  max-width: 1200px;
+  margin: 0 auto;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+
+  /* 背景渐变，可根据需要调整 */
+  background: linear-gradient(rgba(245, 247, 250, 0.85), rgba(195, 207, 226, 0.85)),
+    url('/pexels-dung-lee-901360365-35295671.jpg') center/cover no-repeat;
+  min-height: 100vh;
+}
+
+/* 标题 */
+.user-center-container h2 {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+/* 上传按钮区域 */
+.upload-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.upload-section button {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  background-color: #4a90e2;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.upload-section button:hover {
+  background-color: #357abd;
+}
+
+/* 图片网格 */
+.my-images-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 200px);
+  gap: 20px;
+  justify-content: center;
+}
