@@ -218,6 +218,46 @@ def upload_image():
     }
 
 
+import base64
+import requests
+import tempfile
+from flask import request
+from flask_jwt_extended import jwt_required
+from PIL import Image as PILImage
+
+# ==============================
+# 百度 AI API 配置
+# ==============================
+# BAIDU_API_KEY = "你的API_KEY"
+# BAIDU_SECRET_KEY = "你的SECRET_KEY"
+
+# def get_baidu_access_token():
+#     url = "https://aip.baidubce.com/oauth/2.0/token"
+#     params = {
+#         "grant_type": "client_credentials",
+#         "client_id": BAIDU_API_KEY,
+#         "client_secret": BAIDU_SECRET_KEY
+#     }
+#     resp = requests.post(url, data=params)
+#     resp.raise_for_status()
+#     return resp.json().get("access_token")
+
+def baidu_image_recognition(file_path: str):
+    access_token = "24.38b059d432dec1a5b891dee03e98f81d.2592000.1768880834.282335-121472551"
+    with open(file_path, "rb") as f:
+        img_base64 = base64.b64encode(f.read()).decode("utf-8")
+    url = f"https://aip.baidubce.com/rest/2.0/image-classify/v2/advanced_general?access_token={access_token}"
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    data = {"image": img_base64}
+    r = requests.post(url, headers=headers, data=data)
+    r.raise_for_status()
+    result = r.json().get("result", [])
+    labels = [item.get("keyword") for item in result if item.get("keyword")]
+    return labels
+
+# ==============================
+# 原路由整合
+# ==============================
 @image_bp.route("/images/analyze", methods=["POST"])
 @jwt_required()
 def analyze_image_exif():
@@ -225,10 +265,8 @@ def analyze_image_exif():
         return {"error": "No file provided"}, 400
 
     file = request.files["file"]
-
     if file.filename == "":
         return {"error": "Empty filename"}, 400
-
     if not allowed_file(file.filename):
         return {"error": "File type not allowed"}, 400
 
@@ -239,39 +277,37 @@ def analyze_image_exif():
     except Exception:
         return {"error": "Invalid image"}, 400
 
-    # === 2️⃣ EXIF 解析（需要临时文件）===
-    import tempfile
-
+    # === 2️⃣ EXIF + AI 标签解析（临时文件）===
     exif_time = None
     gps = None
     device_info = None
+    ai_tags = []
 
     with tempfile.NamedTemporaryFile(delete=True) as tmp:
         file.stream.seek(0)
         tmp.write(file.stream.read())
         tmp.flush()
 
+        # EXIF 信息
         exif_time = extract_exif_time(tmp.name)
         gps = extract_exif_gps(tmp.name)
         device_info = extract_exif_device(tmp.name)
 
+        # AI 标签
+        ai_tags = baidu_image_recognition(tmp.name)
+
     # === 3️⃣ location 美化 ===
     location = format_gps(*gps) if gps else None
+    gps_info = {"lat": gps[0], "lon": gps[1]} if gps else None
 
-    gps_info = None
-    if gps:
-        gps_info = {
-            "lat": gps[0],
-            "lon": gps[1],
-        }
-
-    # === 4️⃣ 统一使用 generate_exif_tags ===
+    # === 4️⃣ 生成推荐标签，加入 AI 标签 ===
     suggested_tags = generate_exif_tags(
         exif_time=exif_time,
         width=width,
         height=height,
         gps_info=gps_info,
         device_info=device_info,
+        ai_labels=ai_tags  # 把 AI 标签也加入推荐标签
     )
 
     return {
@@ -282,7 +318,8 @@ def analyze_image_exif():
             "location": location,
             "device": device_info,
         },
-        "suggested_tags": suggested_tags,
+        "ai_tags": ai_tags,          # 新增字段，可单独显示
+        "suggested_tags": suggested_tags,  # 包含 AI 标签的最终推荐标签
     }
 
 

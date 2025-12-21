@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { login } from '../api/auth'
-
+import "../style/login-register.css"
 export default function Login({setToken}) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -25,25 +25,24 @@ export default function Login({setToken}) {
   }
 
   return (
-    <div style={{ padding: 40 }}>
+    <div className="auth-container">
       <h2>Login</h2>
       <input
         placeholder="Username"
         value={username}
         onChange={e => setUsername(e.target.value)}
       />
-      <br />
       <input
         type="password"
         placeholder="Password"
         value={password}
         onChange={e => setPassword(e.target.value)}
       />
-      <br />
       <button onClick={handleLogin}>Login</button>
       <p>
         No account? <Link to="/register">Register</Link>
       </p>
     </div>
+
   )
 }

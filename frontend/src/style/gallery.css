@@ -1,15 +1,105 @@
-.gallery-page {
-  padding: 40px;
+/* Gallery 页面整体容器 */
+.gallery-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
 }
 
-.gallery-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+/* 标题 */
+.gallery-container h2 {
+  text-align: center;
   margin-bottom: 20px;
+  color: #1f2937;
 }
 
-.gallery-header button {
-  padding: 6px 12px;
+/* 排序按钮 */
+.sort-buttons {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.sort-buttons button {
+  padding: 8px 16px;
+  background-color: #4f46e5;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
   cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+.sort-buttons button:hover {
+  background-color: #4338ca;
+}
+
+.sort-buttons button:active {
+  transform: scale(0.98);
+}
+
+/* 搜索类型 select */
+.search-type {
+  margin-bottom: 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 14px;
+}
+
+/* 推荐轮播容器 */
+.carousel-wrapper {
+  max-width: 1000px;
+  margin: 0 auto 32px auto;
+}
+
+/* GalleryGrid 图片网格 */
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+/* 图片卡片 */
+.gallery-grid img {
+  width: 100%;
+  border-radius: 12px;
+  object-fit: cover;
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.gallery-grid img:hover {
+  transform: scale(1.05);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .gallery-container {
+    padding: 16px;
+  }
+
+  .gallery-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+  }
+
+  .sort-buttons {
+    justify-content: center;
+  }
+
+  .search-type {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .gallery-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .carousel-wrapper {
+    width: 100%;
+  }
 }

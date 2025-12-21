@@ -116,65 +116,63 @@ export default function Gallery() {
      UI
   ============================= */
   return (
-    <div style={{ padding: 40 }}>
-      <h2>Gallery</h2>
-      <BackToHomeButton />
+    <div className="gallery-container">
+  <h2>Gallery</h2>
+  <BackToHomeButton />
 
-      {/* 推荐轮播（始终显示） */}
-      {carouselImages.length > 0 && (
-        <div style={{ marginBottom: 32 }}>
-          <ImageCarousel images={carouselImages} />
-        </div>
-      )}
-
-      {/* 排序 */}
-      <div style={{ marginBottom: 16 }}>
-        <button
-          onClick={() => setSort("time")}
-          style={{ fontWeight: sort === "time" ? "bold" : "normal" }}
-        >
-          Time
-        </button>
-        <button
-          onClick={() => setSort("hot")}
-          style={{
-            marginLeft: 10,
-            fontWeight: sort === "hot" ? "bold" : "normal",
-          }}
-        >
-          Hot
-        </button>
-      </div>
-
-      {/* 搜索类型 */}
-      <select
-        value={searchType}
-        onChange={e => setSearchType(e.target.value)}
-        style={{ marginBottom: 12 }}
-      >
-        <option value="tag">Search by Tag</option>
-        <option value="username">Search by Username</option>
-        <option value="image_id">Search by Image ID</option>
-      </select>
-
-      {/* SearchBar */}
-      <TagBar
-        tags={filteredTags}
-        activeTags={activeTags}
-        onAddTag={handleAddTag}
-        onRemoveTag={handleRemoveTag}
-        searchInput={searchInput}
-        setSearchInput={setSearchInput}
-        onSearchSubmit={handleSearchSubmit}
-        searchType={searchType}
-      />
-
-      {/* Gallery */}
-      {loading ? (
-        <p>Loading...</p>
-      ) : (
-        <GalleryGrid images={images} />
-      )}
+  {/* 推荐轮播 */}
+  {carouselImages.length > 0 && (
+    <div className="carousel-wrapper">
+      <ImageCarousel images={carouselImages} />
     </div>
+  )}
+
+  {/* 排序按钮 */}
+  <div className="sort-buttons">
+    <button
+      onClick={() => setSort("time")}
+      style={{ fontWeight: sort === "time" ? "bold" : "normal" }}
+    >
+      Time
+    </button>
+    <button
+      onClick={() => setSort("hot")}
+      style={{ fontWeight: sort === "hot" ? "bold" : "normal" }}
+    >
+      Hot
+    </button>
+  </div>
+
+  {/* 搜索类型 */}
+  <select
+    value={searchType}
+    onChange={e => setSearchType(e.target.value)}
+    className="search-type"
+  >
+    <option value="tag">Search by Tag</option>
+    <option value="username">Search by Username</option>
+    <option value="image_id">Search by Image ID</option>
+  </select>
+
+  {/* SearchBar */}
+  <TagBar
+    tags={filteredTags}
+    activeTags={activeTags}
+    onAddTag={handleAddTag}
+    onRemoveTag={handleRemoveTag}
+    searchInput={searchInput}
+    setSearchInput={setSearchInput}
+    onSearchSubmit={handleSearchSubmit}
+    searchType={searchType}
+  />
+
+  {/* Gallery */}
+  {loading ? (
+    <p>Loading...</p>
+  ) : (
+    <GalleryGrid images={images} />
+  )}
+</div>
+
   )
 }

@@ -92,7 +92,7 @@ export default function UploadPage() {
             disabled={analyzing}
             style={{ marginTop: 16 }}
           >
-            {analyzing ? "Analyzing EXIF..." : "Analyze EXIF"}
+            {analyzing ? "Analyzing ..." : "Analyze Tags"}
           </button>
 
           {/* EXIF 信息 */}

@@ -48,24 +48,27 @@ export default function Register() {
   }
 
   return (
-    <div style={{ padding: 40 }}>
+    <div className="auth-container">
       <h2>Register</h2>
+
       <div>
         <input
           placeholder="Username"
           value={username}
           onChange={e => setUsername(e.target.value)}
         />
-        {errors.username && <p style={{ color: 'red', margin: 0 }}>{errors.username}</p>}
+        {errors.username && <p className="error-text">{errors.username}</p>}
       </div>
+
       <div>
         <input
           placeholder="Email"
           value={email}
           onChange={e => setEmail(e.target.value)}
         />
-        {errors.email && <p style={{ color: 'red', margin: 0 }}>{errors.email}</p>}
+        {errors.email && <p className="error-text">{errors.email}</p>}
       </div>
+
       <div>
         <input
           type="password"
@@ -73,13 +76,17 @@ export default function Register() {
           value={password}
           onChange={e => setPassword(e.target.value)}
         />
-        {errors.password && <p style={{ color: 'red', margin: 0 }}>{errors.password}</p>}
+        {errors.password && <p className="error-text">{errors.password}</p>}
       </div>
-      <button onClick={handleRegister} style={{ marginTop: 10 }}>Register</button>
-      {errors.server && <p style={{ color: 'red' }}>{errors.server}</p>}
+
+      <button onClick={handleRegister}>Register</button>
+
+      {errors.server && <p className="error-text">{errors.server}</p>}
+
       <p>
         Already have an account? <Link to="/login">Login</Link>
       </p>
     </div>
+
   )
 }

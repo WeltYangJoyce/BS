@@ -7,12 +7,10 @@ def generate_exif_tags(
     height: int,
     gps_info: dict | None = None,
     device_info: dict | None = None,
+    ai_labels: list[str] | None = None,   # 新增参数，AI 标签
 ):
-
-
-
     """
-    根据 EXIF 信息生成推荐标签（不入库）
+    根据 EXIF 信息 + AI 标签生成推荐标签（不入库）
     """
     tags = []
 
@@ -22,7 +20,6 @@ def generate_exif_tags(
     if exif_time:
         try:
             dt = datetime.strptime(exif_time, "%Y:%m:%d %H:%M:%S")
-
             tags.append(str(dt.year))           # 2024
             tags.append(dt.strftime("%Y-%m"))   # 2024-03
 
@@ -35,7 +32,6 @@ def generate_exif_tags(
                 tags.append("night")
             else:
                 tags.append("midnight")
-
         except Exception:
             pass
 
@@ -56,27 +52,17 @@ def generate_exif_tags(
             tags.append("square")
 
     # =============================
-    # 📍 地点（Phase 2 预留）
-    # =============================
-   # =============================
-    # 📍 GPS 规则型标签（无外部依赖）
+    # 📍 GPS 规则型标签
     # =============================
     if gps_info:
         tags.append("location")
         tags.append("has_gps")
-
         lat = gps_info.get("lat")
-        lon = gps_info.get("lon")
-
-        # 半球判断（可写进报告）
         if lat is not None:
             if lat >= 0:
                 tags.append("north_hemisphere")
             else:
                 tags.append("south_hemisphere")
-
-    # 室外照片（经验规则）
-    #tags.append("outdoor")
 
     # =============================
     # 📷 设备相关 Tag
@@ -87,12 +73,15 @@ def generate_exif_tags(
 
         if make:
             tags.append(make.lower())
-
         if model:
             tags.append(model.lower().replace(" ", "_"))
-
         if make or model:
             tags.append("device")
 
+    # =============================
+    # 🤖 AI 标签合并
+    # =============================
+    if ai_labels:
+        tags.extend(ai_labels)
 
-    return list(set(tags))
+    return list(set(tags))  # 去重后返回
