@@ -11,7 +11,7 @@ __pycache__/
 *.sqlite3
 *.db
 *.log
-
+scripts/
 # Runtime data
 backend/data/**
 !backend/data/.gitkeep
